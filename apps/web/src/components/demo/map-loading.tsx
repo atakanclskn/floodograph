@@ -5,7 +5,7 @@ import type { MapPhase } from "./flood-map";
 
 const STEPS: { phase: Exclude<MapPhase, "error" | "booting">; label: string }[] = [
   { phase: "basemap", label: "Altlık harita ve izohipsler" },
-  { phase: "ready", label: "19.763 bina ve akış koridorları" },
+  { phase: "ready", label: "Binalar ve akış koridorları" },
 ];
 const ORDER: MapPhase[] = ["booting", "basemap", "ready"];
 
@@ -40,7 +40,7 @@ export function MapLoading({ phase }: { phase: MapPhase }) {
             >
               <div className="flex items-center gap-2.5">
                 <span className="fg-spinner" aria-hidden="true" />
-                <span className="text-sm font-medium">Ayazağa hazırlanıyor</span>
+                <span className="text-sm font-medium">Pilot alan hazırlanıyor</span>
               </div>
               <ol className="flex flex-col gap-1.5">
                 {STEPS.map((s) => {

@@ -4,7 +4,7 @@ import { DemoApp } from "@/components/demo/demo-app";
 
 export const metadata: Metadata = {
   title: "Demo · Floodograph",
-  description: "Sarıyer-Ayazağa: izohipsler, akış koridorları ve 19.763 binanın aciliyet kademesi.",
+  description: "Sarıyer pilot alanı: izohipsler, akış koridorları, binaların aciliyet kademesi ve 14 Ekim 2026 selinin saat saat oynatımı.",
 };
 
 const SLIDE = { "nav-forward": "nav-forward", "nav-back": "nav-back", default: "none" } as const;

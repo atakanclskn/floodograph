@@ -7,6 +7,8 @@ import { CITY_ID, SCENARIO_ID, playbackStart, scenarioEnd } from "@/lib/scenario
 import { FrameStore } from "@/lib/water-frames";
 import { usePlayback } from "@/lib/playback-store";
 
+const RECHECK_MS = 60_000;
+
 export type ScenarioData = {
   scenario: Scenario;
   rain: RainPoint[];
@@ -29,13 +31,17 @@ export function useScenario(): { state: ScenarioState; retry: () => void } {
   useEffect(() => {
     let cancelled = false;
     let frames: FrameStore | null = null;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
     (async () => {
       try {
         const repo = floodRepository();
         const list = await repo.listScenarios(CITY_ID);
         const scenario = list.find((s) => s.id === SCENARIO_ID);
         if (!scenario) {
-          if (!cancelled) setState({ status: "missing" });
+          if (cancelled) return;
+          setState({ status: "missing" });
+          // the scenario may be mid-upload: look again in a minute without flashing a loader
+          retryTimer = setTimeout(() => setAttempt((a) => a + 1), RECHECK_MS);
           return;
         }
         const [rain, refs] = await Promise.all([
@@ -54,6 +60,7 @@ export function useScenario(): { state: ScenarioState; retry: () => void } {
     })();
     return () => {
       cancelled = true;
+      clearTimeout(retryTimer);
       frames?.dispose();
     };
   }, [attempt]);

@@ -229,7 +229,7 @@ function ScenarioNotice({ state, onRetry, compact = false }: { state: ScenarioSt
       </div>
       <p className="text-[13px] leading-normal text-fg-3">
         {missing
-          ? "14 Ekim 2026 simülasyonunun kareleri sunucuya aktarılıyor. Birkaç dakika sonra tekrar dene; statik analiz bu sırada kullanılabilir."
+          ? "14 Ekim 2026 simülasyonunun kareleri sunucuya aktarılıyor. Sayfa her dakika kendiliğinden yeniden bakıyor; statik analiz bu sırada kullanılabilir."
           : "Bağlantı kurulamadı. Ağını kontrol edip tekrar dene."}
       </p>
       <button
@@ -404,7 +404,7 @@ export function DemoApp() {
   const scenarioHeader = (
     <div className="flex items-baseline justify-between gap-3">
       <h1 className="font-display text-lg font-semibold tracking-[-0.02em] sm:text-xl">14 Ekim 2026 seli</h1>
-      <span className="font-mono text-xs text-fg-3">Sarıyer · Ayazağa</span>
+      <span className="font-mono text-xs text-fg-3">Sarıyer pilot alanı</span>
     </div>
   );
 
@@ -446,7 +446,7 @@ export function DemoApp() {
             </svg>
           </Link>
           <span className="pr-2 font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
-          <span className="hidden border-l border-line px-2.5 py-1.5 font-mono text-xs text-fg-3 sm:inline">İstanbul · Ayazağa</span>
+          <span className="hidden border-l border-line px-2.5 py-1.5 font-mono text-xs text-fg-3 sm:inline">İstanbul · Sarıyer</span>
         </header>
         <div
           className="glass fg-rise pointer-events-auto flex gap-1 rounded-2xl p-1.5"

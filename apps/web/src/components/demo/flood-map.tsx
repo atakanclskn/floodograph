@@ -21,10 +21,12 @@ type GeoData = GeoJSONSourceSpecification["data"];
 type Feature = { type: "Feature"; id?: number; geometry: unknown; properties: BuildingProps & { ht?: Tier } };
 type FC = { type: "FeatureCollection"; features: Feature[] };
 
-export const AYAZAGA: [number, number] = [29.0175, 41.105];
+/** Pilot area (Sarıyer, İstanbul): bbox [28.965, 41.090, 29.040, 41.145]. */
+export const PILOT_CENTER: [number, number] = [29.0025, 41.1175];
+/** Pan limit: the pilot bbox plus a margin so the edges can be brought to the middle of the screen. */
 const BOUNDS: [[number, number], [number, number]] = [
-  [28.94, 41.05],
-  [29.1, 41.16],
+  [28.935, 41.07],
+  [29.07, 41.165],
 ];
 /** Copied from maplibre-gl/dist by scripts/copy-maplibre-worker.mjs (pre-dev / pre-build). */
 const WORKER_URL = "/vendor/maplibre-gl-worker.mjs";
@@ -107,6 +109,26 @@ const wetColor = (t: number, selectedId: number | null): ExpressionSpecification
 
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
 
+/** Push buildings and corridors into the map; returns the sorted first-wet minutes. */
+function applyData(map: MlMap, b: FC, c: { features: unknown[] }, onStats: (s: MapStats) => void): Float64Array {
+  const tiers = { acil: 0, yuksek: 0, orta: 0, izle: 0 } as Record<Tier, number>;
+  const fws: number[] = [];
+  for (const f of b.features) {
+    const p = f.properties;
+    const ht = tierFromHand(p.hand ?? Number.POSITIVE_INFINITY, p.crit ?? null);
+    p.ht = ht;
+    tiers[ht]++;
+    if (p.fw != null) fws.push(p.fw);
+  }
+  const fwSorted = Float64Array.from(fws).sort();
+  (map.getSource("buildings") as GeoJSONSource).setData(b as GeoData);
+  (map.getSource("corridors") as GeoJSONSource).setData(c as GeoData);
+  const corridors = { derived: 0, buried_osm: 0, open: 0 } as Record<CorridorKind, number>;
+  for (const f of c.features as { properties: CorridorProps }[]) corridors[f.properties.kind]++;
+  onStats({ tiers, corridors, fwSorted, total: b.features.length });
+  return fwSorted;
+}
+
 const prefersReducedMotion = () => window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
 export function FloodMap(props: FloodMapProps) {
@@ -115,6 +137,8 @@ export function FloodMap(props: FloodMapProps) {
   const fwRef = useRef<Float64Array | null>(null);
   const latest = useRef(props);
   const [mapReady, setMapReady] = useState(false);
+  /** bumps whenever building data is (re)loaded, so paint expressions are rebuilt */
+  const [dataVersion, setDataVersion] = useState(0);
   useEffect(() => {
     latest.current = props;
   });
@@ -148,8 +172,8 @@ export function FloodMap(props: FloodMapProps) {
       map = new Map({
         container: container.current,
         style: buildBaseStyle({ demTiles: urls.dem, contourTiles: urls.contours }),
-        center: AYAZAGA,
-        zoom: narrow ? 13.2 : 14.2,
+        center: PILOT_CENTER,
+        zoom: narrow ? 13.1 : 14,
         pitch: latest.current.tilted ? 52 : 0,
         bearing: -18,
         maxBounds: BOUNDS,
@@ -220,23 +244,8 @@ export function FloodMap(props: FloodMapProps) {
         try {
           const [braw, c] = await data;
           if (disposed || !map) return;
-          const b = braw as FC;
-          const tiers = { acil: 0, yuksek: 0, orta: 0, izle: 0 } as Record<Tier, number>;
-          const fws: number[] = [];
-          for (const f of b.features) {
-            const p = f.properties;
-            const ht = tierFromHand(p.hand ?? Number.POSITIVE_INFINITY, p.crit ?? null);
-            p.ht = ht;
-            tiers[ht]++;
-            if (p.fw != null) fws.push(p.fw);
-          }
-          const fwSorted = Float64Array.from(fws).sort();
-          fwRef.current = fwSorted;
-          (map.getSource("buildings") as GeoJSONSource).setData(b as GeoData);
-          (map.getSource("corridors") as GeoJSONSource).setData(c as GeoData);
-          const corridors = { derived: 0, buried_osm: 0, open: 0 } as Record<CorridorKind, number>;
-          for (const f of c.features as { properties: CorridorProps }[]) corridors[f.properties.kind]++;
-          latest.current.onStats({ tiers, corridors, fwSorted, total: b.features.length });
+          fwRef.current = applyData(map, braw as FC, c, latest.current.onStats);
+          setDataVersion((v) => v + 1);
           map.once("idle", () => latest.current.onPhase("ready"));
         } catch (err) {
           latest.current.onError(err instanceof Error ? err.message : "Veri yüklenemedi");
@@ -252,6 +261,29 @@ export function FloodMap(props: FloodMapProps) {
   }, []);
 
   const { mode, scenario, showContours, showCorridors, tilted, activeTiers, selectedId } = props;
+
+  // The scenario can appear after the first building download (it is uploaded separately). Then the
+  // buildings came without impacts: fetch them once more so fw/md are there for playback.
+  const scenarioReady = scenario != null;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || !scenarioReady || dataVersion === 0 || (fwRef.current?.length ?? 0) > 0) return;
+    let cancelled = false;
+    const repo = floodRepository();
+    Promise.all([repo.buildings(latest.current.cityId, SCENARIO_ID), repo.corridors(latest.current.cityId)])
+      .then(([b, c]) => {
+        if (cancelled || !mapRef.current) return;
+        const fw = applyData(mapRef.current, b as unknown as FC, c, latest.current.onStats);
+        if (fw.length) {
+          fwRef.current = fw;
+          setDataVersion((v) => v + 1);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [mapReady, scenarioReady, dataVersion]);
 
   // Water: canvas source pinned to the simulation grid corners, painted from the frame store.
   const grid = scenario?.grid ?? null;
@@ -352,7 +384,7 @@ export function FloodMap(props: FloodMapProps) {
     apply(usePlayback.getState().t);
     const unsub = usePlayback.subscribe((s) => apply(s.t));
     return unsub;
-  }, [mapReady, mode, activeTiers, selectedId]);
+  }, [mapReady, mode, activeTiers, selectedId, dataVersion]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -380,7 +412,7 @@ export function FloodMap(props: FloodMapProps) {
   // maplibre-gl.css sets the container to position:relative, so size it from a wrapper.
   return (
     <div className="absolute inset-0">
-      <div ref={container} className="h-full w-full" role="region" aria-label="Ayazağa sel analiz haritası" />
+      <div ref={container} className="h-full w-full" role="region" aria-label="Sarıyer pilot alanı sel analiz haritası" />
     </div>
   );
 }
