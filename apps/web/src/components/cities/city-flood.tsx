@@ -200,7 +200,10 @@ export function CityFlood() {
 
   return (
     <div className="fixed inset-0 bg-ink">
-      <div ref={container} className="absolute inset-0" role="region" aria-label={`${city.name} sel haritası`} />
+      {/* maplibre-gl.css forces the map container to position:relative, so size it from a wrapper */}
+      <div className="absolute inset-0">
+        <div ref={container} className="h-full w-full" role="region" aria-label={`${city.name} sel haritası`} />
+      </div>
 
       <header className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
         <div className="glass pointer-events-auto flex items-center gap-1.5 rounded-2xl p-1.5">
