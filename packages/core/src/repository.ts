@@ -105,18 +105,18 @@ export class SupabaseFloodRepository implements FloodRepository {
   }
 
   async loadGridFrame(scenarioId: string, tMin: number): Promise<GridFrame> {
-    // Frames live in Postgres (bytea); ask PostgREST for the raw bytes instead of hex-encoded JSON.
+    // Frames live in Postgres (bytea). PostgREST only serves raw bytes for functions that return an
+    // "application/octet-stream" domain (it answers 406 otherwise), so we take the default JSON form:
+    // a "\x…" hex string. gzip on the wire keeps it within ~15 % of the binary size.
     const res = await fetch(`${this.rest.url}/rest/v1/rpc/get_grid_frame`, {
       method: "POST",
-      headers: {
-        apikey: this.rest.key,
-        "Content-Type": "application/json",
-        Accept: "application/octet-stream",
-      },
+      headers: { apikey: this.rest.key, "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify({ p_scenario: scenarioId, p_t: tMin }),
     });
     if (!res.ok) throw new Error(`frame ${scenarioId}@${tMin}: HTTP ${res.status}`);
-    return decodeFrame(new Uint8Array(await res.arrayBuffer()));
+    const hex = (await res.json()) as string | null;
+    if (!hex) throw new Error(`frame ${scenarioId}@${tMin}: missing`);
+    return decodeFrame(hexToBytes(hex));
   }
 
   async summary(scenarioId: string): Promise<ScenarioSummary> {
@@ -124,4 +124,15 @@ export class SupabaseFloodRepository implements FloodRepository {
     if (error) throw error;
     return data as ScenarioSummary;
   }
+}
+
+/** Decode PostgREST's JSON form of bytea ("\x0a1b…") into bytes. */
+export function hexToBytes(hex: string): Uint8Array {
+  const start = hex.startsWith("\\x") ? 2 : 0;
+  const out = new Uint8Array((hex.length - start) >> 1);
+  for (let i = 0, j = start; i < out.length; i++, j += 2) {
+    const hi = hex.charCodeAt(j), lo = hex.charCodeAt(j + 1);
+    out[i] = (((hi & 0xf) + (hi > 57 ? 9 : 0)) << 4) | ((lo & 0xf) + (lo > 57 ? 9 : 0));
+  }
+  return out;
 }
