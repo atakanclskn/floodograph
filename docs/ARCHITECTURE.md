@@ -27,11 +27,23 @@ Floodograph, üstü kapatılmış dereleri yükseklik verisinden yeniden bulan v
 
 ---
 
+## 0. Katman bazında araç seçimleri (ücretsiz öncelikli, 7 Kasım güncellemesi)
+
+| Katman | Seçim | Neden |
+| --- | --- | --- |
+| Harita motoru | **MapLibre GL JS 6** | Açık kaynak, ücretsiz, anahtar ve kota yok. 3D arazi, küre ve three.js özel katmanı destekli. Mapbox GL JS'in açık çatalı. |
+| Temel harita | **OpenFreeMap** vektör karoları, kendi stilimiz | Ücretsiz, anahtarsız, sınırsız |
+| İzohips | **maplibre-contour**, yükseklik karolarından tarayıcıda | Ek sunucu yok, istenen aralıkta kontur |
+| 3D arazi karoları | Ücretsiz Terrarium/Mapterhorn yükseklik karoları | Anahtarsız |
+| Hesap DEM'i | **FABDEM** (bina ve ağaçlardan arındırılmış), yedek Copernicus GLO-30 | Copernicus bir yüzey modeli. Binalar zaten içinde olduğundan şehirde selin yönünü bozar. |
+| Uydu (isteğe bağlı) | Esri World Imagery ya da Sentinel-2 cloudless | Ücretsiz atıf ile. Gerekirse sonra. |
+| Yağış | Open-Meteo (arşiv, geçmiş tahmin, tahmin) | Ücretsiz, anahtarsız |
+
 ## 1. Repo yapısı (monorepo, npm workspaces)
 
 ```
 floodograph/
-  apps/web/          Next.js (son sürüm, App Router) + TS + mapbox-gl + three.js   → Vercel (root: apps/web)
+  apps/web/          Next.js (son sürüm, App Router) + TS + MapLibre GL JS + three.js   → Vercel (root: apps/web)
   apps/mobile/       Expo (son SDK) + expo-router + TS                           → EAS: Android APK, iOS Expo Go
   packages/core/     Ortak TS: tipler, FloodRepository, RainSource, zaman çizelgesi, kademe kuralları
   pipeline/          Python 3.12 (uv): veri hattı ve 2D sel modeli
@@ -74,7 +86,7 @@ cities.yaml   ad, sınır kutusu, EPSG (İstanbul ve İzmir 32635, Ankara 32636)
 ### Gerçekçi su akışı modeli
 
 1. **Izgara:**
-   - Copernicus GLO-30 DEM, UTM'ye projekte edilir ve **10 m'ye yeniden örneklenir.** Bu yeni bilgi eklemez, ama binaların engel olarak çizilebilmesini sağlar.
+   - **FABDEM** (Copernicus GLO-30'dan bina ve ağaçları arındırılmış çıplak zemin modeli, ücretsiz, CC BY-NC-SA). Erişilemezse Copernicus GLO-30 ve bina maskesi kullanılır. UTM'ye projekte edilir ve **10 m'ye yeniden örneklenir.** Bu yeni bilgi eklemez, ama binaların engel olarak çizilebilmesini sağlar.
    - OSM bina izleri engel olarak işlenir ("building-block" yöntemi): o hücrelere bina yüksekliği eklenir.
    - Bina yüksekliği OSM'deki `building:levels` × 3 m, etiket yoksa 9 m.
 2. **Akış ağı ve HAND:** Çukurları doldurulmuş 30 m DEM üzerinde D8 akış yönü, birikim ve HAND hesaplanır. Bir hücreye yaklaşık 0,3 km²'den fazla alan akıyorsa orası koridor sayılır.
@@ -174,14 +186,14 @@ cities.yaml   ad, sınır kutusu, EPSG (İstanbul ve İzmir 32635, Ankara 32636)
 **İki görünüm** (`MapController` facade'ı ile yönetilir, React bileşenleri mapbox ya da three API'sine doğrudan dokunmaz):
 
 **a) Analiz görünümü (varsayılan): izohipsli arazi haritası**
-- Kendi minimal Mapbox stilimiz (Mapbox Studio ya da kod içi stil JSON). Hazır stil kullanılmaz.
-- `mapbox-terrain-v2` kontur katmanı, hafif tepe gölgesi, sade renk paleti.
+- Kendi minimal stilimiz (kod içi stil JSON), OpenFreeMap vektör karoları üzerinde. Hazır stil kullanılmaz.
+- İzohipsler `maplibre-contour` ile ücretsiz yükseklik karolarından tarayıcıda üretilir. Hafif tepe gölgesi, sade renk paleti.
 - Koridorlar ve gömülü dereler animasyonlu çizgiler. Binalar düz, kademe rengine göre.
 - PostGIS'ten gelen derinlik bantları sade su katmanı olarak.
 - Kademe paneli, yağış grafiği ve zaman çizelgesi.
 
 **b) Sinematik görünüm (şov noktası): 3D sel sahnesi**
-- Mapbox `CustomLayerInterface` içinde, aynı WebGL bağlamını paylaşan **three.js**. Arazi Mapbox Terrain-DEM'den gelir, su ve binalar three.js'te çizilir.
+- MapLibre `CustomLayerInterface` içinde, aynı WebGL2 bağlamını paylaşan **three.js**. Arazi ücretsiz yükseklik karolarından MapLibre terrain olarak gelir, su ve binalar three.js'te çizilir.
 - **Su yüzeyi:** Izgara karesinden üretilen yükseklik alanı ağı. Köşe yüksekliği = `queryTerrainElevation` + derinlik.
   - Kareler arası zaman enterpolasyonu sayesinde su kesintisiz yükselir ve çekilir.
   - Özel shader: hız alanıyla sürüklenen normal haritaları (flow map) sayesinde su akış yönünde süzülür.
@@ -294,7 +306,7 @@ cities.yaml   ad, sınır kutusu, EPSG (İstanbul ve İzmir 32635, Ankara 32636)
 
 ## 8. Kullanıcıdan gerekenler
 
-- **Mapbox:** URL kısıtlamalı genel (`pk.`) anahtar. Vercel ortam değişkenine ve yerel `.env`'e girer.
+- **Mapbox:** Artık gerekmiyor (MapLibre ve ücretsiz karolar). Yalnızca ileride isteğe bağlı bir uydu katmanı için.
 - **Supabase:** Veritabanı bağlantı dizesi ve `service_role` anahtarı. **Yalnızca** yerel `pipeline/.env`'e girer, asla repoya girmez.
 - **Vercel:** MCP için `authorize_team_access` onayı ya da panelden root `apps/web` ve ortam değişkenlerinin ayarlanması.
 - **Expo hesabı:** EAS ile APK almak için.
