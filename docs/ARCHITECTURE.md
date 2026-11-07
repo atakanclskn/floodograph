@@ -39,6 +39,24 @@ Floodograph, üstü kapatılmış dereleri yükseklik verisinden yeniden bulan v
 | Uydu (isteğe bağlı) | Esri World Imagery ya da Sentinel-2 cloudless | Ücretsiz atıf ile. Gerekirse sonra. |
 | Yağış | Open-Meteo (arşiv, geçmiş tahmin, tahmin) | Ücretsiz, anahtarsız |
 
+## 0b. HEC-RAS ile konumlanma (7 Kasım)
+
+**Hedef:** HEC-RAS'ın 2D çekirdeğine olabildiğince yaklaşmak: tam sığ su denklemleri, rain-on-grid, sızma ve menfezler. Ayrışacağımız yerler ise Türkiye'ye özel otomatik kurulum ve 3D sunum.
+
+| | HEC-RAS 6.6 (kararlı) | HEC-RAS 2025 (beta, Nisan 2026'dan beri) | Floodograph |
+| --- | --- | --- | --- |
+| 2D denklemler | Diffusion wave ve tam SWE | Yeni açık (explicit) motor, GPU yol haritasında | Tam SWE (HLL ve hidrostatik yeniden yapılandırma), yedek local inertial |
+| Rain-on-grid | Var | 2026 yol haritasında | Var |
+| Menfez ve köprü | Var (ayrıntılı) | 2026–2027 yol haritasında | Basitleştirilmiş menfez ağı (kapasite ve taşma) |
+| Model kurulumu | Uzman elle, saatler ya da günler sürer | Aynı | **Otomatik:** `cities.yaml`'a bir satır yazınca DEM, bina, arazi örtüsü ve yağış açık veriden gelir |
+| Platform | Masaüstü (Windows) | Linux ve konteyner | **Tarayıcı ve mobil**, kurulum yok |
+| Sonuç sunumu | 2D harita (RAS Mapper) | Aynı | **Sinematik 3D**, saat saat oynatma, aciliyet kademeleri |
+| Doğrulama verisi | Kullanıcı getirir | Aynı | Haberlerden otomatik (YZ) ve uydu taşkın haritası |
+
+**Dürüst sınır:** HEC-RAS 30 yılı aşkın birikim taşıyor: düzensiz ağ (mesh), 1D-2D bağlaşımı, ayrıntılı yapılar, sediment taşınımı. Bunların hepsini yapmıyoruz. Çekirdek denklemleri aynı sınıftan çözüyoruz ve bunu analitik testlerle kanıtlıyoruz.
+
+**İsteğe bağlı kıyas:** Ekipten biri HEC-RAS 6.6'yı biliyorsa (ücretsiz, Windows), aynı 5x5 km Ayazağa kurgusu HEC-RAS'ta da çalıştırılır. İki derinlik haritası arasındaki IoU, "endüstri standardına karşı doğrulama" olarak sunulur.
+
 ## 1. Repo yapısı (monorepo, npm workspaces)
 
 ```
@@ -93,10 +111,18 @@ cities.yaml   ad, sınır kutusu, EPSG (İstanbul ve İzmir 32635, Ankara 32636)
 3. **Gömülü dereler:**
    - OSM'de `waterway=* + tunnel=culvert` olarak işaretli kapalı dereler gerçek veridir.
    - Türetilen koridorlardan açık bir dereyle örtüşmeyenler "gömülü dere adayı" olarak işaretlenir.
-4. **2D model:** Local inertial yöntemi (Bates 2010, de Almeida 2012 q-merkezli şema).
-   - Zaman adımı uyarlanır (CFL α = 0,7).
-   - Manning sürtünme katsayısı arazi örtüsüne (WorldCover) göre: beton yaklaşık 0,015–0,03, bitki örtüsü 0,05–0,1.
-   - Kenarlardan su serbestçe çıkar, deniz hücreleri suyu yutar.
+4. **2D model: tam sığ su denklemleri (HEC-RAS sınıfı çekirdek).**
+   - **Ana çözücü:** Yapılandırılmış ızgarada sonlu hacim yöntemi, HLL Riemann çözücüsü ve **hidrostatik yeniden yapılandırma** (Audusse vd. 2004). Bu "durgun suyu" bozmayan (well-balanced) şema, ıslak-kuru sınırları ve dik sokaklarda oluşan hızlı (süperkritik) akışı doğru çözer. Ayazağa vadisi dik olduğu için bu önemli.
+   - **Kaynak terimleri:** Yağış (rain-on-grid), Manning sürtünmesi (yarı kapalı/semi-implicit), sızma ve yağmur suyu kanalı kaybı.
+   - **Zaman adımı:** CFL 0,45 ile uyarlanır. numba ile paralel çalışır.
+   - **Yedek:** Local inertial (Bates 2010, de Almeida 2012) aynı `FloodModel` arayüzüyle. HEC-RAS'taki "diffusion wave" seçeneğinin karşılığı, hızlı tarama için.
+   - **Manning katsayısı** arazi örtüsüne (WorldCover) göre: beton yaklaşık 0,015–0,03, bitki örtüsü 0,05–0,1.
+   - **Sınırlar:** Kenarlardan su serbestçe çıkar, deniz hücreleri suyu yutar.
+   - **Doğrulama testleri** (HEC-RAS'ın kendi doğrulama setinde de kullanılan klasik çözümler):
+     - Ritter baraj yıkılması analitik çözümü
+     - Durgun göl (well-balanced) testi
+     - Thacker salınımı
+     - Kütle korunumu
 5. **Kayıplar:**
    - Arazi örtüsüne göre sabit bir sızma hızı (mm/saat).
    - Yapılaşmış alanlarda bir yağmur suyu kanalı kapasitesi (parametre, örneğin 20 mm/saat).
