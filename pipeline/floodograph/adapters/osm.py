@@ -11,13 +11,13 @@ ox.settings.log_console = False
 ox.settings.requests_timeout = 180
 
 CRITICAL_TAGS = {
-    "amenity": ["hospital", "clinic", "school", "kindergarten", "university", "fire_station", "nursing_home"],
+    "amenity": ["hospital", "clinic", "school", "kindergarten", "fire_station", "nursing_home"],
     "healthcare": ["hospital"],
     "social_facility": ["nursing_home", "assisted_living"],
 }
 CRITICAL_MAP = {
     "hospital": "hastane", "clinic": "hastane",
-    "school": "okul", "kindergarten": "okul", "university": "okul",
+    "school": "okul", "kindergarten": "okul",  # universities excluded: campus polygons would tag every building
     "fire_station": "itfaiye",
     "nursing_home": "bakimevi", "assisted_living": "bakimevi",
 }
