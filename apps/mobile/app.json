@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "Floodograph",
+    "slug": "floodograph",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/images/adaptive-icon.png",
+    "scheme": "floodograph",
+    "userInterfaceStyle": "dark",
+    "backgroundColor": "#0a0f12",
+    "description": "Gömülü dereleri ve sel riskini bina bina gösteren harita.",
+    "ios": {
+      "bundleIdentifier": "app.floodograph.mobile",
+      "supportsTablet": true
+    },
+    "android": {
+      "package": "app.floodograph.mobile",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/images/adaptive-icon.png",
+        "backgroundColor": "#0a0f12"
+      }
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/images/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/images/icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#0a0f12"
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
