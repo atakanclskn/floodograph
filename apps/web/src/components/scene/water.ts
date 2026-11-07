@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { D_MAX, V_MAX } from "./data";
 import { DRAW_EPS } from "./field";
-import type { GridGeo } from "./geo";
+import { sampleField, type GridGeo } from "./geo";
 
 /** Shared uniforms (camera, light, fog) every scene material reads. */
 export type SharedUniforms = {
@@ -52,24 +52,48 @@ export const FOG_GLSL = /* glsl */ `
 const vertex = /* glsl */ `
   ${FIELD_GLSL}
   uniform float uLift;
+  uniform float uTime;
+  uniform sampler2D uMask;
   attribute float aGround;
   varying vec2 vUv;
   varying vec3 vPos;
+  varying float vCrest;
+  varying float vHeap;
+
   void main() {
     vec4 a = texture2D(uA, uv);
     vec4 b = texture2D(uB, uv);
-    if (max(a.a, b.a) < 0.5) {
-      // no wet cell within one mesh step: collapse, the whole triangle becomes degenerate
+    if (mix(a.a, b.a, uAlpha) < 0.02) {
+      // no wet cell nearby: collapse, the whole triangle becomes degenerate
       gl_Position = vec4(0.0, 0.0, 2.0, 1.0);
-      vUv = uv;
-      vPos = vec3(0.0);
+      vUv = uv; vPos = vec3(0.0); vCrest = 0.0; vHeap = 0.0;
       return;
     }
-    float d = mix(a.r * a.r, b.r * b.r, uAlpha) * D_MAX;
-    vec3 p = vec3(position.xy, aGround + (d > DRAW_EPS ? d + uLift : -0.8));
+    float d = fieldDepth(uv);
+    vec2 vel = fieldVel(uv);
+    float sp = length(vel);
+    vec2 dir = sp > 1e-3 ? vel / sp : vec2(0.7071, 0.7071);
+    vec2 nrm = vec2(-dir.y, dir.x);
+    vec2 p = position.xy;
+
+    // Surface waves travelling WITH the modelled current (visual detail the 20 m model does not resolve):
+    // wavelength and celerity grow with local speed, crests are sharpened so fast water reads as a torrent.
+    float wet = smoothstep(DRAW_EPS, 0.4, d);
+    float lam = 6.0 + 2.6 * sp;
+    float ph = dot(p, dir) * 6.2832 / lam - uTime * (1.4 + 1.25 * sp) + 0.8 * sin(dot(p, nrm) * 0.17 + uTime * 0.5);
+    float crest = pow(0.5 + 0.5 * sin(ph), 3.0);
+    float xw = sin(dot(p, nrm) * 0.55 + dot(p, dir) * 0.21 - uTime * 1.7);
+    float amp = wet * min(0.04 + 0.17 * sp, 0.65) * min(d * 1.3, 1.0);
+    // stagnation head where the current runs into a wall: v^2 / 2g, the height moving water piles up to
+    float m = texture2D(uMask, uv).r;
+    float heap = smoothstep(0.04, 0.4, m) * (1.0 - smoothstep(0.6, 0.95, m)) * min(sp * sp / 19.62, 1.4) * wet;
+    float surf = d + uLift + amp * (crest * 1.7 - 0.45) + amp * 0.3 * xw + heap;
+    vec3 pos = vec3(p, aGround + (d > DRAW_EPS ? surf : -0.9));
     vUv = uv;
-    vPos = p;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    vPos = pos;
+    vCrest = crest * smoothstep(0.6, 2.2, sp);
+    vHeap = heap;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0);
   }
 `;
 
@@ -83,101 +107,113 @@ const fragment = /* glsl */ `
   uniform vec3 uSun;
   varying vec2 vUv;
   varying vec3 vPos;
-
-  vec3 sampleNormal(vec2 p, float scale, vec2 off) {
-    vec3 n = texture2D(uNormalTex, (p - off) / scale).xyz * 2.0 - 1.0;
-    return n;
-  }
+  varying float vCrest;
+  varying float vHeap;
 
   void main() {
     float d = fieldDepth(vUv);
     if (d < DRAW_EPS) discard;
     vec2 vel = fieldVel(vUv);
-    float speed = length(vel);
-
-    // flow map: two half-period phases sliding along the velocity field, cross-faded to hide the reset
-    const float PERIOD = 3.0;
-    float t = uTime / PERIOD;
-    float ph0 = fract(t);
-    float ph1 = fract(t + 0.5);
-    float w0 = 1.0 - abs(1.0 - 2.0 * ph0);
-    float w1 = 1.0 - w0;
-    vec2 drift = vel * PERIOD * 1.1;
+    float sp = length(vel);
+    vec2 dir = sp > 1e-3 ? vel / sp : vec2(0.7071, 0.7071);
+    vec2 nrm = vec2(-dir.y, dir.x);
     vec2 p = vPos.xy;
-    vec3 n0 = sampleNormal(p, 11.0, drift * ph0) + sampleNormal(p + 37.0, 4.3, drift * ph0 * 1.3);
-    vec3 n1 = sampleNormal(p + 13.0, 11.0, drift * ph1) + sampleNormal(p + 71.0, 4.3, drift * ph1 * 1.3);
-    // a slow, unflowing swell breaks the tiling on still water
-    vec3 sw = sampleNormal(p * 0.23 + vec2(uTime * 0.6, uTime * 0.35), 9.0, vec2(0.0));
-    vec2 nxy = (n0.xy * w0 + n1.xy * w1) * 0.5;
-    float rough = clamp(0.16 + speed * 0.38, 0.16, 0.95);
-    vec3 N = normalize(vec3(nxy * rough + sw.xy * 0.18, 1.0));
+    // flow-aligned coordinates: along / across the current
+    vec2 q = vec2(dot(p, dir), dot(p, nrm));
+
+    // geometric normal of the displaced surface (the 3D waves) ...
+    vec3 Ng = normalize(cross(dFdx(vPos), dFdy(vPos)));
+    if (Ng.z < 0.0) Ng = -Ng;
+    // ... plus broad ripples stretched along the flow and scrolling with it (no fine glitter)
+    float stretch = 1.0 + sp * 0.9;
+    float scroll = uTime * (0.25 + sp * 0.9);
+    vec2 r1 = texture2D(uNormalTex, vec2((q.x - scroll) / (16.0 * stretch), q.y / 16.0)).xy * 2.0 - 1.0;
+    vec2 r2 = texture2D(uNormalTex, vec2((q.x - scroll * 1.6) / (6.5 * stretch), q.y / 6.5 + 0.37)).xy * 2.0 - 1.0;
+    vec2 rip = (r1 * 0.6 + r2 * 0.4) * (0.35 + min(sp, 3.0) * 0.25);
+    vec2 ripW = rip.x * dir + rip.y * nrm;
+    vec3 N = normalize(vec3(Ng.xy + ripW * 0.55, Ng.z));
 
     vec3 V = normalize(uCam - vPos);
     vec3 L = normalize(uSun);
     float ndv = max(dot(N, V), 0.0);
-    float fres = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
+    float fres = 0.03 + 0.97 * pow(1.0 - ndv, 5.0);
     vec3 R = reflect(-V, N);
-    vec3 sky = mix(vec3(0.40, 0.45, 0.49), vec3(0.05, 0.07, 0.09), clamp(R.z * 1.2, 0.0, 1.0));
-    sky += vec3(0.28, 0.15, 0.06) * pow(1.0 - clamp(R.z, 0.0, 1.0), 7.0); // warm city glow on the horizon
-    float spec = pow(max(dot(R, L), 0.0), 220.0) * 2.2 + pow(max(dot(R, L), 0.0), 18.0) * 0.08;
+    vec3 sky = mix(vec3(0.34, 0.37, 0.42), vec3(0.08, 0.10, 0.13), clamp(R.z * 1.3, 0.0, 1.0));
+    sky += vec3(0.42, 0.22, 0.08) * pow(1.0 - clamp(R.z, 0.0, 1.0), 6.0); // warm street-light glow on the horizon
+    float spec = pow(max(dot(R, L), 0.0), 70.0) * 0.55 + pow(max(dot(R, L), 0.0), 8.0) * 0.06;
 
-    // turbid flood water: muddy brown when shallow, dark silty olive when deep
-    vec3 shallow = vec3(0.25, 0.19, 0.12);
-    vec3 mid = vec3(0.14, 0.11, 0.075);
-    vec3 deep = vec3(0.045, 0.05, 0.045);
-    vec3 base = mix(shallow, mid, smoothstep(0.03, 0.6, d));
-    base = mix(base, deep, smoothstep(0.5, 3.5, d));
-    float diff = 0.55 + 0.45 * max(dot(N, L), 0.0);
+    // turbid flood water: milky clay-brown when shallow, dark chocolate when deep
+    vec3 shallow = vec3(0.47, 0.36, 0.23);
+    vec3 mid = vec3(0.31, 0.22, 0.13);
+    vec3 deep = vec3(0.14, 0.10, 0.065);
+    vec3 base = mix(shallow, mid, smoothstep(0.05, 0.8, d));
+    base = mix(base, deep, smoothstep(0.8, 4.0, d));
+    float diff = 0.5 + 0.5 * max(dot(N, L), 0.0);
     vec3 col = base * diff;
 
-    // foam: fast flow, building edges and the advancing front
-    vec2 fo0 = (p - drift * ph0 * 1.4) / 7.0;
-    vec2 fo1 = (p + 5.0 - drift * ph1 * 1.4) / 7.0;
-    float pattern = texture2D(uFoamTex, fo0).r * w0 + texture2D(uFoamTex, fo1).r * w1;
-    pattern = pattern * 0.7 + texture2D(uFoamTex, p / 23.0 - drift * 0.01).r * 0.3;
+    // foam streaks drawn out along the current, travelling with it
+    float sAlong = (q.x - uTime * (0.6 + sp * 2.2)) / (10.0 + sp * 7.0);
+    float streak = texture2D(uFoamTex, vec2(sAlong, q.y / 2.6)).r;
+    streak = streak * 0.65 + texture2D(uFoamTex, vec2(sAlong * 0.43 + 0.5, q.y / 6.0 + 0.2)).r * 0.35;
+    // whitewater: fast flow, wave crests, water piling against walls, and the thin advancing front
     float m = texture2D(uMask, vUv).r;
     float edge = smoothstep(0.04, 0.3, m) * (1.0 - smoothstep(0.55, 0.95, m));
-    float amount = smoothstep(0.7, 2.6, speed)
-      + edge * smoothstep(0.12, 0.9, speed) * 0.9
-      + (1.0 - smoothstep(DRAW_EPS, 0.14, d)) * smoothstep(0.08, 0.6, speed) * 0.6;
+    float amount = smoothstep(1.0, 3.2, sp) * 0.75
+      + vCrest * 0.8
+      + clamp(vHeap * 1.6, 0.0, 1.0) * 0.8
+      + edge * smoothstep(0.2, 1.2, sp) * 0.5
+      + (1.0 - smoothstep(DRAW_EPS, 0.12, d)) * smoothstep(0.1, 0.7, sp) * 0.5;
     amount = clamp(amount, 0.0, 1.0);
-    float foam = smoothstep(1.0 - amount, 1.12 - amount * 0.7, pattern) * amount;
-    col = mix(col, vec3(0.80, 0.77, 0.70) * (0.55 + 0.45 * diff), foam * 0.85);
+    float foam = smoothstep(1.0 - amount, 1.15 - amount * 0.6, streak) * amount;
+    // a faint grain of silt so even calm-looking water shows which way it moves
+    float silt = smoothstep(0.55, 0.9, streak) * 0.12 * smoothstep(0.1, 0.8, sp);
+    col = mix(col, vec3(0.86, 0.82, 0.74) * (0.6 + 0.4 * diff), clamp(foam * 0.92 + silt, 0.0, 1.0));
 
-    float rim = 1.0 - smoothstep(DRAW_EPS, 0.08, d);
-    col = mix(col, vec3(0.36, 0.29, 0.2), rim * 0.55);
-    col = mix(col, sky, clamp(fres * 1.25, 0.0, 0.85) * (1.0 - foam)) + spec * vec3(1.0, 0.93, 0.82) * (1.0 - foam);
+    float rim = 1.0 - smoothstep(DRAW_EPS, 0.1, d);
+    col = mix(col, vec3(0.40, 0.31, 0.2), rim * 0.5);
+    col = mix(col, sky, clamp(fres * 1.1, 0.0, 0.7) * (1.0 - foam)) + spec * vec3(1.0, 0.9, 0.75) * (1.0 - foam);
     col = applyFog(col, vPos);
-    float alpha = smoothstep(DRAW_EPS, 0.09, d) * (0.88 + 0.1 * smoothstep(0.2, 2.0, d)) + fres * 0.1 + foam * 0.2;
+    float alpha = smoothstep(DRAW_EPS, 0.1, d) * 0.94 + fres * 0.05 + foam * 0.1;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
   }
 `;
 
-/** Height-field water surface over the simulation grid (one vertex per `stride` cells). */
-export function createWater(geo: GridGeo, ground: Float32Array, stride: number, shared: SharedUniforms, tex: { normal: THREE.Texture; foam: THREE.Texture }) {
+/**
+ * Height-field water surface over the simulation grid: one vertex step every `stride` cells, split into `sub`
+ * vertices. sub > 1 gives the 3D waves geometry to live on and rounds off the 20 m stair-steps of the model grid.
+ */
+export function createWater(
+  geo: GridGeo,
+  ground: Float32Array,
+  stride: number,
+  shared: SharedUniforms,
+  tex: { normal: THREE.Texture; foam: THREE.Texture },
+  sub = 1,
+) {
   const { nx, ny } = geo;
-  const cols: number[] = [];
-  for (let i = 0; i < nx; i += stride) cols.push(i);
-  if (cols[cols.length - 1] !== nx - 1) cols.push(nx - 1);
-  const rows: number[] = [];
-  for (let j = 0; j < ny; j += stride) rows.push(j);
-  if (rows[rows.length - 1] !== ny - 1) rows.push(ny - 1);
-  const W = cols.length;
-  const H = rows.length;
+  const step = stride / Math.max(1, sub);
+  const xs: number[] = [];
+  for (let f = 0; f < nx - 1; f += step) xs.push(f);
+  xs.push(nx - 1);
+  const ys: number[] = [];
+  for (let f = 0; f < ny - 1; f += step) ys.push(f);
+  ys.push(ny - 1);
+  const W = xs.length;
+  const H = ys.length;
   const pos = new Float32Array(W * H * 3);
   const uv = new Float32Array(W * H * 2);
   const g = new Float32Array(W * H);
   for (let r = 0; r < H; r++)
     for (let c = 0; c < W; c++) {
-      const i = cols[c]!;
-      const j = rows[r]!;
+      const fi = xs[c]!;
+      const fj = ys[r]!;
       const k = r * W + c;
-      const [x, y] = geo.cellToLocal(i, j);
+      const [x, y] = geo.cellToLocal(fi, fj);
       pos[k * 3] = x;
       pos[k * 3 + 1] = y;
-      uv[k * 2] = (i + 0.5) / nx;
-      uv[k * 2 + 1] = (j + 0.5) / ny;
-      g[k] = ground[j * nx + i]!;
+      uv[k * 2] = (fi + 0.5) / nx;
+      uv[k * 2 + 1] = (fj + 0.5) / ny;
+      g[k] = sampleField(ground, nx, ny, fi, fj);
     }
   const index = new Uint32Array((W - 1) * (H - 1) * 6);
   let q = 0;
@@ -201,7 +237,7 @@ export function createWater(geo: GridGeo, ground: Float32Array, stride: number, 
     fragmentShader: fragment,
     uniforms: {
       ...shared,
-      uLift: { value: 0.35 },
+      uLift: { value: 0.3 },
       uNormalTex: { value: tex.normal },
       uFoamTex: { value: tex.foam },
     },
@@ -217,4 +253,3 @@ export function createWater(geo: GridGeo, ground: Float32Array, stride: number, 
   mesh.renderOrder = 2;
   return mesh;
 }
-

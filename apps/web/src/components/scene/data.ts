@@ -266,6 +266,36 @@ export class FrameStore {
     return true;
   }
 
+  /**
+   * Per cell, the first frame time (sim minutes) at which depth x speed reaches `dv` m2/s with speed >= `vMin` m/s,
+   * and the grid velocity at that moment (for the direction a structure is pushed). Unreached cells: t = Infinity.
+   * Frames are scanned in time order, so the result is the onset, not just the peak.
+   */
+  firstExceedance(dv: number, vMin: number): { t: Float32Array; u: Float32Array; v: Float32Array } {
+    const n = this.cells;
+    const t = new Float32Array(n).fill(Infinity);
+    const u = new Float32Array(n);
+    const v = new Float32Array(n);
+    this.frames.forEach((f, i) => {
+      if (!f) return;
+      const tm = this.times[i]!;
+      for (let k = 0; k < f.idx.length; k++) {
+        const c = f.idx[k]!;
+        if (t[c]! <= tm) continue;
+        const d = decodeDepth(f.rgb[k * 3]!);
+        const uu = decodeVel(f.rgb[k * 3 + 1]!);
+        const vv = decodeVel(f.rgb[k * 3 + 2]!);
+        const s = Math.hypot(uu, vv);
+        if (s >= vMin && d * s >= dv) {
+          t[c] = tm;
+          u[c] = uu;
+          v[c] = vv;
+        }
+      }
+    });
+    return { t, u, v };
+  }
+
   /** Per-cell maximum depth over all loaded frames (m). */
   maxDepthField(): Float32Array {
     const out = new Float32Array(this.cells);

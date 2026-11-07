@@ -6,10 +6,23 @@ import { rng } from "./textures";
 
 /**
  * Drifting cars, logs and wreckage. A VISUAL REPRESENTATION tied to the model's depth and velocity fields:
- * each object lifts off once the local depth passes its threshold, is carried along the simulated velocity,
+ * each object is mobilised once the local flow passes its threshold, is carried along the simulated velocity,
  * bobs and turns on the surface and settles where the water leaves it. No object physics is simulated.
+ *
+ * Cars use the vehicle-stability criterion of the flood-hazard literature (Shu et al. 2011; Martinez-Gomariz
+ * et al. 2018): a parked car is swept away once depth x speed reaches ~0.45 m2/s, or it floats above ~0.55 m.
+ * Rubble from destroyed buildings enters the water at the moment of collapse.
  */
-type Kind = { name: string; geom: THREE.BufferGeometry; lift: number; draft: number; drift: number; colors: number[]; spin: number };
+type Kind = {
+  name: string;
+  geom: THREE.BufferGeometry;
+  lift: number;
+  dv: number;
+  draft: number;
+  drift: number;
+  colors: number[];
+  spin: number;
+};
 
 function carGeometry() {
   const body = new THREE.BoxGeometry(4.3, 1.8, 0.75);
@@ -48,6 +61,8 @@ type Obj = {
   phase: number;
   floating: boolean;
   scale: number;
+  /** sim minute the object comes into existence (rubble); -Infinity for objects that are always there */
+  appear: number;
 };
 
 const SCRATCH = { d: 0, u: 0, v: 0 };
@@ -58,6 +73,7 @@ export class Debris {
   private meshes: THREE.InstancedMesh[] = [];
   private objs: Obj[] = [];
   private counts: number[];
+  private rubbleCap: number;
   private m = new THREE.Matrix4();
   private q = new THREE.Quaternion();
   private e = new THREE.Euler();
@@ -72,14 +88,16 @@ export class Debris {
     budget: number,
   ) {
     this.kinds = [
-      { name: "araç", geom: carGeometry(), lift: 0.3, draft: 0.55, drift: 0.85, spin: 0.35, colors: [0xd9d6cf, 0x9aa3a8, 0x2a2f33, 0x6b1f1f, 0x1f3550, 0xe8b512, 0xe8b512, 0x4a4f45] },
-      { name: "kütük", geom: logGeometry(), lift: 0.12, draft: 0.12, drift: 1.0, spin: 0.9, colors: [0x5a3f28, 0x6b4b30, 0x4a3422] },
-      { name: "moloz", geom: wreckGeometry(), lift: 0.15, draft: 0.08, drift: 0.95, spin: 1.3, colors: [0x7d6d58, 0x5f5f58, 0x2f4f6f, 0x8a7a62] },
+      { name: "araç", geom: carGeometry(), lift: 0.55, dv: 0.45, draft: 0.55, drift: 0.85, spin: 0.35, colors: [0xd9d6cf, 0x9aa3a8, 0x2a2f33, 0x6b1f1f, 0x1f3550, 0xe8b512, 0xe8b512, 0x4a4f45] },
+      { name: "kütük", geom: logGeometry(), lift: 0.12, dv: 0.1, draft: 0.12, drift: 1.0, spin: 0.9, colors: [0x5a3f28, 0x6b4b30, 0x4a3422] },
+      { name: "moloz", geom: wreckGeometry(), lift: 0.15, dv: 0.15, draft: 0.08, drift: 0.95, spin: 1.3, colors: [0x7d6d58, 0x5f5f58, 0x2f4f6f, 0x8a7a62] },
     ];
-    this.counts = [Math.round(budget * 0.45), Math.round(budget * 0.2), Math.round(budget * 0.35)];
+    this.counts = [Math.round(budget * 0.5), Math.round(budget * 0.15), Math.round(budget * 0.35)];
+    this.rubbleCap = Math.round(budget * 1.2);
     const mat = new THREE.MeshLambertMaterial({ vertexColors: false });
     this.kinds.forEach((k, i) => {
-      const mesh = new THREE.InstancedMesh(k.geom, mat, this.counts[i]!);
+      const cap = this.counts[i]! + (i === 2 ? this.rubbleCap : 0);
+      const mesh = new THREE.InstancedMesh(k.geom, mat, cap);
       mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
       mesh.frustumCulled = false;
       mesh.count = 0;
@@ -97,7 +115,8 @@ export class Debris {
     const { nx, ny } = this.geo;
     const rand = rng(seed);
     const cand: number[] = [];
-    for (let c = 0; c < nx * ny; c++) if (maxDepth[c]! > 0.45 && mask[c]! < 0.2) cand.push(c);
+    // anywhere the flood reaches: some cars only get wet feet and stay parked, which is the honest picture
+    for (let c = 0; c < nx * ny; c++) if (maxDepth[c]! > 0.25 && mask[c]! < 0.2) cand.push(c);
     this.objs = [];
     if (!cand.length) return;
     this.kinds.forEach((k, ki) => {
@@ -119,6 +138,7 @@ export class Debris {
           phase: rand() * 100,
           floating: false,
           scale: 1.25 + rand() * 0.25,
+          appear: -Infinity,
         });
         color.setHex(k.colors[Math.floor(rand() * k.colors.length)]!);
         mesh.setColorAt(n, color);
@@ -126,6 +146,42 @@ export class Debris {
       mesh.count = this.counts[ki]!;
       if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     });
+  }
+
+  /**
+   * Rubble from destroyed buildings: a few broken pieces per footprint that enter the water at the collapse
+   * minute, pushed off in the direction of the current. Call after place().
+   */
+  addRubble(list: { x: number; y: number; t: number; dx: number; dy: number }[], seed = 33) {
+    const rand = rng(seed);
+    const mesh = this.meshes[2]!;
+    const k = this.kinds[2]!;
+    const color = new THREE.Color();
+    let n = this.counts[2]!;
+    const per = Math.max(2, Math.min(6, Math.floor(this.rubbleCap / Math.max(1, list.length))));
+    for (const b of list) {
+      for (let r = 0; r < per && n < this.counts[2]! + this.rubbleCap; r++, n++) {
+        const x = b.x + b.dx * (3 + rand() * 6) + (rand() - 0.5) * 8;
+        const y = b.y + b.dy * (3 + rand() * 6) + (rand() - 0.5) * 8;
+        this.objs.push({
+          kind: 2,
+          hx: x,
+          hy: y,
+          x,
+          y,
+          yaw: rand() * Math.PI * 2,
+          yawRate: (rand() - 0.5) * k.spin * 1.5,
+          phase: rand() * 100,
+          floating: false,
+          scale: 1.4 + rand() * 1.1,
+          appear: b.t + 1 + rand() * 4,
+        });
+        color.setHex(k.colors[Math.floor(rand() * k.colors.length)]!);
+        mesh.setColorAt(n, color);
+      }
+    }
+    mesh.count = n;
+    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
   }
 
   /** Send everything back to where it was parked (after seeking backwards). */
@@ -137,20 +193,31 @@ export class Debris {
     }
   }
 
-  /** dtVisual: real seconds scaled by playback rate (0 when paused). time: visual clock for bobbing. */
-  update(dtVisual: number, time: number) {
+  /** dtVisual: real seconds scaled by playback rate (0 when paused). time: visual clock for bobbing. simT: sim minute. */
+  update(dtVisual: number, time: number, simT = Infinity) {
     const { geo, ground, field } = this;
     const { nx, ny } = geo;
     const counters = [0, 0, 0];
     let floating = 0;
     for (const o of this.objs) {
       const k = this.kinds[o.kind]!;
+      if (simT < o.appear) {
+        // not yet: the building it comes from is still standing
+        const n = counters[o.kind]!++;
+        this.m.makeScale(0, 0, 0);
+        this.meshes[o.kind]!.setMatrixAt(n, this.m);
+        o.x = o.hx;
+        o.y = o.hy;
+        o.floating = false;
+        continue;
+      }
       const [fx, fy] = geo.localToCell(o.x, o.y);
       field.sample(fx, fy, SCRATCH);
       const g = sampleField(ground, nx, ny, fx, fy);
       const d = SCRATCH.d;
-      if (!o.floating && d > k.lift) o.floating = true;
-      else if (o.floating && d < k.lift * 0.5) o.floating = false; // stranded where the water left it
+      const speed = Math.hypot(SCRATCH.u, SCRATCH.v);
+      if (!o.floating && (d > k.lift || (d > 0.1 && d * speed > k.dv))) o.floating = true;
+      else if (o.floating && d < Math.min(k.lift, 0.3) * 0.5) o.floating = false; // stranded where the water left it
       let z = g;
       let roll = 0,
         pitch = 0;

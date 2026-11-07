@@ -17,13 +17,30 @@ export type BuildingIndex = {
   /** footprint centres of buildings with fw (local xy) and their fw, for spray at walls */
   wetEdges: { x: number; y: number; fw: number }[];
   mesh: THREE.Mesh;
+  /** one record per footprint polygon: its vertex range, centre and the water cells around it */
+  parts: { start: number; end: number; feature: number; cx: number; cy: number; ring: number[] }[];
 };
+
+/**
+ * Structural failure thresholds (Clausen & Clark 1990, masonry and concrete buildings): with flow speed >= 2 m/s,
+ * depth x speed >= 3 m2/s causes partial damage and >= 7 m2/s total destruction. The scene animates the
+ * consequence; it does not model the structure.
+ */
+export const FAIL_V_MIN = 2;
+export const FAIL_DV_DAMAGE = 3;
+export const FAIL_DV_DESTROY = 7;
+type Exceed = { t: Float32Array; u: Float32Array; v: Float32Array };
+
 
 const vertex = /* glsl */ `
   ${FIELD_GLSL}
   uniform float uSimT;
+  uniform float uTime;
   attribute vec4 aInfo;   // fw, md, ground (m), tier
   attribute vec2 aUv;
+  attribute vec4 aFail;   // failure onset (sim min), push direction (local xy), severity (1 destroyed, 0.3 damaged, 0 none)
+  attribute float aHeight; // roof height above ground (m)
+  varying float vRuin;
   varying vec3 vPos;
   varying float vAbove;
   varying float vWetLine;
@@ -38,9 +55,27 @@ const vertex = /* glsl */ `
     vWetLine = max(here > DRAW_EPS ? here + 0.25 : 0.0, 0.7 * vWetK);
     vFlash = since >= 0.0 ? exp(-since / 14.0) : 0.0;
     vTier = aInfo.w;
-    vPos = position;
-    vAbove = position.z - aInfo.z;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vec3 p = position;
+    float sev = aFail.w;
+    float k = sev > 0.0 ? smoothstep(aFail.x, aFail.x + 1.5 + 5.0 * sev, uSimT) : 0.0;
+    float pre = sev > 0.0 ? smoothstep(aFail.x - 4.0, aFail.x, uSimT) * (1.0 - k) : 0.0;
+    float hAbove = max(p.z - aInfo.z, 0.0);
+    float rel = hAbove / max(aHeight, 1.0);
+    if (k > 0.0 || pre > 0.0) {
+      vec2 dir = aFail.yz;
+      float jit = fract(sin(dot(floor(position * 0.5), vec3(12.9898, 78.233, 37.719))) * 43758.5453) - 0.5;
+      // shudder as the water load builds up
+      p.xy += vec2(sin(uTime * 41.0 + jit * 9.0), cos(uTime * 37.0 + jit * 5.0)) * 0.12 * pre * rel;
+      // lean into the current (shear growing with height), then the destroyed ones pancake to a rubble heap
+      p.xy += dir * hAbove * k * sev * 0.5;
+      float keep = sev > 0.99 ? mix(1.0, 0.1 + 0.16 * fract(jit * 17.0 + 0.5), smoothstep(0.15, 1.0, k)) : mix(1.0, 0.93, k);
+      p.z = aInfo.z + hAbove * keep;
+      p.xy += (dir * (0.6 + jit) + vec2(jit, -jit) * 0.8) * k * sev * 3.0 * rel;
+    }
+    vRuin = k * sev;
+    vPos = p;
+    vAbove = p.z - aInfo.z;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
   }
 `;
 
@@ -55,6 +90,7 @@ const fragment = /* glsl */ `
   varying float vWetK;
   varying float vFlash;
   varying float vTier;
+  varying float vRuin;
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -76,7 +112,7 @@ const fragment = /* glsl */ `
       float inWin = step(0.3, fract(s / 3.4)) * step(fract(s / 3.4), 0.75) * step(0.35, fract(vAbove / 3.0)) * step(fract(vAbove / 3.0), 0.8);
       float on = step(0.62, hash(cell + floor(vPos.xy / 200.0))) * step(1.2, vAbove);
       float dry = step(vWetLine + 0.6, vAbove);
-      col += vec3(1.0, 0.72, 0.42) * inWin * on * dry * uNight * 0.55;
+      col += vec3(1.0, 0.72, 0.42) * inWin * on * dry * uNight * 0.55 * (1.0 - step(0.05, vRuin));
     }
 
     // ground-level wetness: darker, warmer, slightly glossy below the wet line
@@ -89,6 +125,12 @@ const fragment = /* glsl */ `
     float tierW = 0.08 + 0.08 * vTier;
     col = mix(col, col * 0.6 + ember * 0.22, vWetK * roof * tierW);
     col += ember * vFlash * (0.25 + 0.5 * roof);
+
+    // damaged / destroyed: broken concrete and mud, a few cracks catching the ember light
+    float grit = hash(floor(vPos.xy * 1.3) + floor(vPos.z * 1.3));
+    vec3 rubble = mix(vec3(0.30, 0.27, 0.23), vec3(0.20, 0.16, 0.12), grit) * (0.55 + 0.45 * diff);
+    col = mix(col, rubble, smoothstep(0.0, 0.6, vRuin));
+    col += ember * 0.18 * vRuin * step(0.93, grit);
 
     col = applyFog(col, vPos);
     gl_FragColor = vec4(col, 1.0);
@@ -120,12 +162,16 @@ export function createBuildings(
   const maskRaw = new Float32Array(nx * ny);
   const wetTimes: number[] = [];
   const wetEdges: BuildingIndex["wetEdges"] = [];
+  const height: number[] = [];
+  const parts: BuildingIndex["parts"] = [];
+  let featureNo = -1;
 
   for (const f of fc.features) {
     const g = f.geometry;
     if (!g) continue;
     const polys = (g.type === "Polygon" ? [g.coordinates] : g.coordinates) as number[][][][];
     const { h, fw, md, tier } = f.properties;
+    featureNo++;
     let counted = false;
     for (const poly of polys) {
       const outer = poly[0];
@@ -164,6 +210,7 @@ export function createBuildings(
         pos.push(x, y, base, x, y, roofZ);
         info.push(fwv, md || 0, gMean, tierI, fwv, md || 0, gMean, tierI);
         uvs.push(u, v, u, v);
+        height.push(roofZ - gMean, roofZ - gMean);
       }
       const n = ring.length;
       for (let k = 0; k < n; k++) {
@@ -190,14 +237,16 @@ export function createBuildings(
         maxY = Math.max(maxY, fy);
       }
       let hit = false;
-      for (let j = Math.max(0, Math.ceil(minY)); j <= Math.min(ny - 1, Math.floor(maxY)); j++)
-        for (let i = Math.max(0, Math.ceil(minX)); i <= Math.min(nx - 1, Math.floor(maxX)); i++) {
+      const around: number[] = [];
+      for (let j = Math.max(0, Math.floor(minY) - 1); j <= Math.min(ny - 1, Math.ceil(maxY) + 1); j++)
+        for (let i = Math.max(0, Math.floor(minX) - 1); i <= Math.min(nx - 1, Math.ceil(maxX) + 1); i++) {
           const [px, py] = geo.cellToLocal(i, j);
           if (pointInRing(px, py, ring)) {
             maskRaw[j * nx + i] = 1;
             hit = true;
-          }
+          } else around.push(j * nx + i);
         }
+      parts.push({ start, end: pos.length / 3, feature: featureNo, cx, cy, ring: around });
       if (!hit) {
         const [fx, fy] = geo.localToCell(cx, cy);
         const c = Math.round(Math.min(Math.max(fy, 0), ny - 1)) * nx + Math.round(Math.min(Math.max(fx, 0), nx - 1));
@@ -215,6 +264,10 @@ export function createBuildings(
   geom.setAttribute("position", new THREE.Float32BufferAttribute(pos, 3));
   geom.setAttribute("aInfo", new THREE.Float32BufferAttribute(info, 4));
   geom.setAttribute("aUv", new THREE.Float32BufferAttribute(uvs, 2));
+  const fail = new Float32Array((pos.length / 3) * 4);
+  for (let k = 0; k < fail.length; k += 4) fail[k] = 1e6;
+  geom.setAttribute("aFail", new THREE.BufferAttribute(fail, 4));
+  geom.setAttribute("aHeight", new THREE.Float32BufferAttribute(height, 1));
   geom.setIndex(pos.length / 3 > 65535 ? new THREE.Uint32BufferAttribute(idx, 1) : new THREE.Uint16BufferAttribute(idx, 1));
   const mat = new THREE.ShaderMaterial({
     vertexShader: vertex,
@@ -253,7 +306,52 @@ export function createBuildings(
     wetTimes: Float64Array.from(wetTimes).sort(),
     wetEdges,
     mesh,
+    parts,
   };
+}
+
+/**
+ * Give every footprint its failure onset from the simulated flow around it (the water cells bordering the
+ * footprint, since building cells are walls in the model). Returns the destroyed footprints, for rubble.
+ */
+export function applyFailures(b: BuildingIndex, geo: GridGeo, destroy: Exceed, damage: Exceed) {
+  const attr = b.mesh.geometry.getAttribute("aFail") as THREE.BufferAttribute;
+  const arr = attr.array as Float32Array;
+  const destroyed: { x: number; y: number; t: number; dx: number; dy: number }[] = [];
+  const featDestroyed = new Set<number>();
+  const featDamaged = new Set<number>();
+  for (const p of b.parts) {
+    let best = -1;
+    let sev = 0;
+    for (const [ex, s] of [
+      [destroy, 1],
+      [damage, 0.3],
+    ] as const) {
+      let tMin = Infinity;
+      for (const c of p.ring)
+        if (ex.t[c]! < tMin) {
+          tMin = ex.t[c]!;
+          best = c;
+        }
+      if (Number.isFinite(tMin)) {
+        sev = s;
+        break;
+      }
+    }
+    if (!sev || best < 0) continue;
+    const ex = sev === 1 ? destroy : damage;
+    const [vx, vy] = geo.velocityToLocal(ex.u[best]!, ex.v[best]!);
+    const l = Math.hypot(vx, vy) || 1;
+    const t = ex.t[best]!;
+    for (let k = p.start; k < p.end; k++) arr.set([t, vx / l, vy / l, sev], k * 4);
+    if (sev === 1) {
+      featDestroyed.add(p.feature);
+      destroyed.push({ x: p.cx, y: p.cy, t, dx: vx / l, dy: vy / l });
+    } else featDamaged.add(p.feature);
+  }
+  attr.needsUpdate = true;
+  for (const f of featDestroyed) featDamaged.delete(f);
+  return { destroyed, destroyedCount: featDestroyed.size, damagedCount: featDamaged.size };
 }
 
 /** Number of buildings reached by water by minute t (binary search over sorted first-wet times). */

@@ -1,7 +1,15 @@
 import * as maplibregl from "maplibre-gl";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from "maplibre-gl";
 import * as THREE from "three";
-import { createBuildings, wetCount, type BuildingIndex } from "./buildings";
+import {
+  applyFailures,
+  createBuildings,
+  FAIL_DV_DAMAGE,
+  FAIL_DV_DESTROY,
+  FAIL_V_MIN,
+  wetCount,
+  type BuildingIndex,
+} from "./buildings";
 import { AYAZAGA, buildTour, sampleTour, type TourPlan } from "./camera-path";
 import { decodeDepth, decodeVel, FrameStore, openSource, type SceneSource } from "./data";
 import { Debris } from "./debris";
@@ -37,7 +45,16 @@ export type EngineState = {
   total: number;
   series: SeriesPoint[];
   tourMarks: number[];
-  stats: { wetBuildings: number; totalWet: number; maxDepth: number; wetHa: number; floating: number };
+  stats: {
+    wetBuildings: number;
+    totalWet: number;
+    maxDepth: number;
+    wetHa: number;
+    floating: number;
+    destroyed: number;
+    damaged: number;
+    totalDestroyed: number;
+  };
   fps: number;
 };
 
@@ -58,7 +75,7 @@ const initialState: EngineState = {
   total: 0,
   series: [],
   tourMarks: [],
-  stats: { wetBuildings: 0, totalWet: 0, maxDepth: 0, wetHa: 0, floating: 0 },
+  stats: { wetBuildings: 0, totalWet: 0, maxDepth: 0, wetHa: 0, floating: 0, destroyed: 0, damaged: 0, totalDestroyed: 0 },
   fps: 0,
 };
 
@@ -100,6 +117,9 @@ export class FloodEngine {
   private frameIdx = -1;
   private fpsAcc = { n: 0, t: 0 };
   private series: SeriesPoint[] = [];
+  /** sorted collapse / damage onset minutes, for the live counters */
+  private failTimes = { destroyed: new Float64Array(0), damaged: new Float64Array(0) };
+  private hazardsApplied = false;
 
   constructor(private readonly container: HTMLElement) {
     // the pane may still be 0 px wide when we start: fall back to the screen size
@@ -203,7 +223,9 @@ export class FloodEngine {
       this.shared.uA.value = this.field.texA;
       this.shared.uB.value = this.field.texB;
       const tex = { normal: rippleNormalTexture(), foam: foamTexture() };
-      this.scene.add(createWater(geo, ground, stride, this.shared, tex));
+      // sub-cell tessellation: 3x3 vertices per 20 m cell on desktop (~7 m), so the waves have geometry to live on
+      const sub = this.lowPower ? 1 : stride === 1 ? 3 : 4;
+      this.scene.add(createWater(geo, ground, stride, this.shared, tex, sub));
       this.scene.add(new THREE.HemisphereLight(0x8fa3ad, 0x1a1410, 1.6));
       const sun = new THREE.DirectionalLight(0xffe7cc, 1.4);
       sun.position.copy(this.shared.uSun.value).multiplyScalar(1000);
@@ -244,8 +266,27 @@ export class FloodEngine {
   }
 
   private placeDebris() {
-    if (!this.store || !this.debris || !this.buildings) return;
+    if (!this.store || !this.debris || !this.buildings || !this.geo) return;
     this.debris.place(this.store.maxDepthField(), this.buildings.mask);
+    // structural failures need every frame (onset = first frame over the threshold)
+    if (this.store.loaded < this.store.count || this.hazardsApplied) return;
+    this.hazardsApplied = true;
+    const destroy = this.store.firstExceedance(FAIL_DV_DESTROY, FAIL_V_MIN);
+    const damage = this.store.firstExceedance(FAIL_DV_DAMAGE, FAIL_V_MIN);
+    const res = applyFailures(this.buildings, this.geo, destroy, damage);
+    this.debris.addRubble(res.destroyed);
+    const byFeature = (sev: number) => {
+      const first = new Map<number, number>();
+      const attr = this.buildings!.mesh.geometry.getAttribute("aFail");
+      for (const part of this.buildings!.parts) {
+        if (Math.abs(attr.getW(part.start) - sev) > 0.01) continue;
+        const t = attr.getX(part.start);
+        first.set(part.feature, Math.min(first.get(part.feature) ?? Infinity, t));
+      }
+      return Float64Array.from(first.values()).sort();
+    };
+    this.failTimes = { destroyed: byFeature(1), damaged: byFeature(0.3) };
+    this.set({ stats: { ...this.state.stats, totalDestroyed: res.destroyedCount } });
   }
 
   /** All frames are in: find the deepest moment and where it happens, build the tour, scatter objects. */
@@ -374,7 +415,7 @@ export class FloodEngine {
 
     const moving = st.playing ? (st.mode === "tur" ? 1 : st.rate) : 0;
     if (t < this.lastT - 6) this.debris?.reset();
-    this.debris?.update(dt * moving, this.visTime);
+    this.debris?.update(dt * moving, this.visTime, t);
     this.spray?.update(dt, st.playing ? 1 : 0.35);
     this.lastT = t;
     map.triggerRepaint();
@@ -397,6 +438,9 @@ export class FloodEngine {
           maxDepth: sa && sb ? sa.p99 * (1 - k) + sb.p99 * k : 0,
           wetHa: sa && sb ? sa.wetHa * (1 - k) + sb.wetHa * k : 0,
           floating: this.debris?.floating ?? 0,
+          destroyed: wetCount(this.failTimes.destroyed, t),
+          damaged: wetCount(this.failTimes.damaged, t),
+          totalDestroyed: this.failTimes.destroyed.length,
         },
       });
     } else if (t !== st.t) {

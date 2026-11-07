@@ -39,7 +39,7 @@ const EMPTY: EngineState = {
   total: 0,
   series: [],
   tourMarks: [],
-  stats: { wetBuildings: 0, totalWet: 0, maxDepth: 0, wetHa: 0, floating: 0 },
+  stats: { wetBuildings: 0, totalWet: 0, maxDepth: 0, wetHa: 0, floating: 0, destroyed: 0, damaged: 0, totalDestroyed: 0 },
   fps: 0,
 };
 const noop = () => () => {};
@@ -269,9 +269,12 @@ export function SceneApp() {
                 className="glass absolute right-0 top-12 w-[min(320px,calc(100vw-24px))] origin-top-right rounded-2xl p-4 text-[13px] leading-relaxed text-fg-2"
               >
                 Su yüzeyi, derinlik ve akış modelin 5 dakikalık karelerinden gelir; aradaki anlar doğrusal geçişle
-                gösterilir. <span className="text-fg">Sürüklenen araçlar, moloz, kütükler ve köpük görsel temsildir:</span>{" "}
-                modelin hız ve derinlik alanına bağlıdırlar, ama nesne fiziği simüle edilmez. Pencere ışıkları
-                atmosfer içindir.
+                gösterilir. <span className="text-fg">Yıkılan binalar:</span> bina çevresindeki akışta hız × derinlik
+                7 m²/s&rsquo;yi (hız ≥ 2 m/s) geçince yıkılmış, 3 m²/s&rsquo;yi geçince hasarlı sayılır (Clausen &amp; Clark 1990).{" "}
+                <span className="text-fg">Araçlar</span> hız × derinlik 0,45 m²/s&rsquo;de ya da 0,55 m derinlikte sürüklenir.
+                Yıkılma ve sürüklenme <span className="text-fg">görsel temsildir:</span> eşikler modelin hız ve derinlik
+                alanından gelir, ama yapı ve nesne fiziği simüle edilmez. Dalgalar ve köpük 20 m&rsquo;lik modelin
+                çözmediği ayrıntıdır. Pencere ışıkları atmosfer içindir.
               </motion.p>
             )}
           </AnimatePresence>
@@ -323,9 +326,19 @@ export function SceneApp() {
               <Rolling value={s.stats.wetHa} format={fmtInt} />
               <span className="ml-1 text-sm font-normal text-fg-3">ha</span>
             </Stat>
-            <div className="flex items-center justify-between border-t border-line pt-3 text-xs text-fg-3">
-              <span>Sürüklenen nesne</span>
-              <span className="font-mono tabular-nums text-fg-2">{s.stats.floating}</span>
+            <Stat label="Yıkılan bina" accent={s.stats.destroyed > 0}>
+              <Rolling value={s.stats.destroyed} format={fmtInt} />
+              <span className="ml-1.5 text-sm font-normal tracking-normal text-fg-3">/ {fmtInt(s.stats.totalDestroyed)}</span>
+            </Stat>
+            <div className="flex flex-col gap-1.5 border-t border-line pt-3 text-xs text-fg-3">
+              <div className="flex items-center justify-between">
+                <span>Hasarlı bina</span>
+                <span className="font-mono tabular-nums text-fg-2">{s.stats.damaged}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span>Sürüklenen nesne</span>
+                <span className="font-mono tabular-nums text-fg-2">{s.stats.floating}</span>
+              </div>
             </div>
           </motion.dl>
         )}
