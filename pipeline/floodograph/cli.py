@@ -114,6 +114,45 @@ def cmd_city(args: argparse.Namespace) -> None:
         print(json.dumps(s, ensure_ascii=False, indent=2, default=str), flush=True)
 
 
+def cmd_corridors(args: argparse.Namespace) -> None:
+    """City-wide drainage corridors (lost / buried / open streams) without building exposure.
+    Parts inside the --exclude city's pilot area are cut away (that area has its own building-scored corridors)."""
+    import geopandas as gpd
+    from shapely.geometry import box
+
+    from .pipeline import steps
+
+    cities = load_cities()
+    city = cities[args.city]
+    t = time.time()
+    empty = gpd.GeoDataFrame({"osm_id": [], "height_m": [], "hand_m": [], "critical": [], "tier": []},
+                             geometry=[], crs=4326)
+    c = steps.corridors(city, empty)
+    if args.exclude:
+        hole = gpd.GeoSeries([box(*cities[args.exclude].bbox)], crs=4326).to_crs(city.epsg).iloc[0]
+        cc = c.to_crs(city.epsg)
+        cc["geometry"] = cc.geometry.difference(hole).simplify(8)
+        cc = cc[~cc.geometry.is_empty & (cc.geometry.length > 30)].reset_index(drop=True)
+        cc["id"] = range(1, len(cc) + 1)
+        c = cc.to_crs(4326)
+    km = (c.to_crs(city.epsg).length / 1000).groupby(c.kind).sum().round(1).to_dict()
+    summary = {"city": city.id, "corridors": len(c), "by_kind": c.kind.value_counts().to_dict(), "km_by_kind": km,
+               "seconds": round(time.time() - t, 1)}
+    c.to_file(city.data_dir / "corridors.geojson", driver="GeoJSON")
+    if args.upload:
+        from .adapters.postgis_store import PostgisStore
+
+        summary["uploaded"] = PostgisStore().replace_city(city, empty, c)
+    print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
+
+
+def cmd_calibrate(args: argparse.Namespace) -> None:
+    from .pipeline.calibrate import calibrate
+
+    df = calibrate(load_cities()[args.city])
+    print(df.sort_values("score").head(8).to_string(index=False))
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="floodograph")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -151,6 +190,14 @@ def main() -> None:
     k.add_argument("--station-mm", type=float, default=150.0)
     k.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
     k.set_defaults(func=cmd_city)
+    co = sub.add_parser("corridors", help="City-wide stream corridors (no buildings), optional pilot cut-out")
+    co.add_argument("--city", default="istanbul-kent")
+    co.add_argument("--exclude", default="istanbul")
+    co.add_argument("--upload", action="store_true")
+    co.set_defaults(func=cmd_corridors)
+    cb = sub.add_parser("calibrate", help="Parameter sweep of the pilot model against the 14 Oct observations")
+    cb.add_argument("--city", default="istanbul")
+    cb.set_defaults(func=cmd_calibrate)
     args = p.parse_args()
     args.func(args)
 

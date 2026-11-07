@@ -145,6 +145,14 @@ def corridors(city: CityConfig, b: gpd.GeoDataFrame | None = None) -> gpd.GeoDat
     # Exposure: buildings within CORRIDOR_BUFFER_M of each corridor
     if b is None:
         b = buildings(city)
+    if len(b) == 0:
+        # city-wide run without analysed buildings: classification only, no exposure ranking
+        lines["buildings_at_risk"] = 0
+        lines["critical_count"] = 0
+        lines["min_hand"] = np.nan
+        lines["tier"] = "izle"
+        lines["id"] = np.arange(1, len(lines) + 1)
+        return lines.to_crs(4326)
     bp = b.to_crs(city.epsg)
     zones = gpd.GeoDataFrame({"cid": lines.index}, geometry=lines.buffer(CORRIDOR_BUFFER_M), crs=city.epsg)
     j = gpd.sjoin(bp[["hand_m", "critical", "tier", "geometry"]], zones, predicate="intersects")

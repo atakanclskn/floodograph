@@ -24,10 +24,10 @@ type FC = { type: "FeatureCollection"; features: Feature[] };
 
 /** Pilot area (Sarıyer, İstanbul): bbox [28.965, 41.090, 29.040, 41.145]. */
 export const PILOT_CENTER: [number, number] = [29.0025, 41.1175];
-/** Pan limit: the pilot bbox plus a margin so the edges can be brought to the middle of the screen. */
+/** Pan limit: the whole Istanbul urban area, where the city-wide stream corridors are. */
 const BOUNDS: [[number, number], [number, number]] = [
-  [28.935, 41.07],
-  [29.07, 41.165],
+  [28.5, 40.85],
+  [29.5, 41.3],
 ];
 /** Copied from maplibre-gl/dist by scripts/copy-maplibre-worker.mjs (pre-dev / pre-build). */
 const WORKER_URL = "/vendor/maplibre-gl-worker.mjs";
@@ -142,6 +142,44 @@ const blinkFilter = (from: number, to: number, selectedId: number | null): Expre
 
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
 
+/** City-wide stream corridors (classification only; the pilot area is cut out of them, it has its own). */
+const CITYWIDE = "istanbul-kent";
+type CorridorBox = { kind: CorridorKind; x0: number; y0: number; x1: number; y1: number };
+type ViewState = { boxes: CorridorBox[]; last: MapStats | null };
+const VIEW = new WeakMap<MlMap, ViewState>();
+
+/** Pilot corridors plus the city-wide ones (the latter optional: a missing upload just means fewer lines). */
+function loadCorridors(repo: ReturnType<typeof floodRepository>, cityId: string) {
+  const empty = { type: "FeatureCollection", features: [] } as { type: "FeatureCollection"; features: unknown[] };
+  return Promise.all([repo.corridors(cityId), repo.corridors(CITYWIDE).catch(() => empty)]).then(([a, b]) => ({
+    type: "FeatureCollection" as const,
+    features: [...(a.features as unknown[]), ...(b.features as unknown[])],
+  }));
+}
+
+function bboxOf(coords: unknown, box: CorridorBox) {
+  if (typeof (coords as number[])[0] === "number") {
+    const [x, y] = coords as [number, number];
+    if (x < box.x0) box.x0 = x;
+    if (x > box.x1) box.x1 = x;
+    if (y < box.y0) box.y0 = y;
+    if (y > box.y1) box.y1 = y;
+    return;
+  }
+  for (const c of coords as unknown[]) bboxOf(c, box);
+}
+
+/** Corridors whose extent intersects what is on screen, by kind ("count everything on the screen"). */
+function viewCounts(map: MlMap): Record<CorridorKind, number> {
+  const out = { derived: 0, buried_osm: 0, open: 0 } as Record<CorridorKind, number>;
+  const v = VIEW.get(map);
+  if (!v) return out;
+  const b = map.getBounds();
+  const w = b.getWest(), e = b.getEast(), s = b.getSouth(), n = b.getNorth();
+  for (const c of v.boxes) if (c.x1 >= w && c.x0 <= e && c.y1 >= s && c.y0 <= n) out[c.kind]++;
+  return out;
+}
+
 /** Push buildings and corridors into the map; returns the sorted first-wet minutes. */
 function applyData(map: MlMap, b: FC, c: { features: unknown[] }, onStats: (s: MapStats) => void): Float64Array {
   const tiers = { acil: 0, yuksek: 0, orta: 0, izle: 0 } as Record<Tier, number>;
@@ -157,9 +195,16 @@ function applyData(map: MlMap, b: FC, c: { features: unknown[] }, onStats: (s: M
   (map.getSource("buildings") as GeoJSONSource).setData(b as GeoData);
   hideOwnBuildings(map, b.features.map((f) => f.properties.id));
   (map.getSource("corridors") as GeoJSONSource).setData(c as GeoData);
-  const corridors = { derived: 0, buried_osm: 0, open: 0 } as Record<CorridorKind, number>;
-  for (const f of c.features as { properties: CorridorProps }[]) corridors[f.properties.kind]++;
-  onStats({ tiers, corridors, fwSorted, total: b.features.length });
+  const boxes: CorridorBox[] = [];
+  for (const f of c.features as { properties: CorridorProps; geometry: { coordinates: unknown } }[]) {
+    const box: CorridorBox = { kind: f.properties.kind, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    bboxOf(f.geometry.coordinates, box);
+    boxes.push(box);
+  }
+  const stats: MapStats = { tiers, corridors: { derived: 0, buried_osm: 0, open: 0 }, fwSorted, total: b.features.length };
+  VIEW.set(map, { boxes, last: stats });
+  stats.corridors = viewCounts(map);
+  onStats(stats);
   return fwSorted;
 }
 
@@ -191,7 +236,7 @@ export function FloodMap(props: FloodMapProps) {
       }
     })();
     const data = repo
-      ? Promise.all([repo.buildings(latest.current.cityId, SCENARIO_ID) as Promise<unknown>, repo.corridors(latest.current.cityId)])
+      ? Promise.all([repo.buildings(latest.current.cityId, SCENARIO_ID) as Promise<unknown>, loadCorridors(repo, latest.current.cityId)])
       : null;
     data?.catch(() => {}); // handled below; avoid an unhandled rejection before the map is up
 
@@ -288,6 +333,13 @@ export function FloodMap(props: FloodMapProps) {
         map.on("mouseenter", ["buildings", "alarm", "alarm-blink"], () => map && (map.getCanvas().style.cursor = "pointer"));
         map.on("mouseleave", ["buildings", "alarm", "alarm-blink"], () => map && (map.getCanvas().style.cursor = ""));
         setMapReady(true);
+        map.on("moveend", () => {
+          if (!map) return;
+          const v = VIEW.get(map);
+          if (!v?.last) return;
+          v.last = { ...v.last, corridors: viewCounts(map) };
+          latest.current.onStats(v.last);
+        });
 
         if (!data) return;
         try {
@@ -319,7 +371,7 @@ export function FloodMap(props: FloodMapProps) {
     if (!mapReady || !map || !scenarioReady || dataVersion === 0 || (fwRef.current?.length ?? 0) > 0) return;
     let cancelled = false;
     const repo = floodRepository();
-    Promise.all([repo.buildings(latest.current.cityId, SCENARIO_ID), repo.corridors(latest.current.cityId)])
+    Promise.all([repo.buildings(latest.current.cityId, SCENARIO_ID), loadCorridors(repo, latest.current.cityId)])
       .then(([b, c]) => {
         if (cancelled || !mapRef.current) return;
         const fw = applyData(mapRef.current, b as unknown as FC, c, latest.current.onStats);

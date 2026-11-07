@@ -168,6 +168,7 @@ function StaticLegend({
             className="flex flex-col gap-1.5 overflow-hidden border-t border-line pt-3.5"
             aria-label="Akış koridorları"
           >
+            <li className="text-[11px] uppercase tracking-[0.1em] text-fg-3">Ekranda görünen koridorlar</li>
             {CORRIDOR_ORDER.map((k) => (
               <li key={k} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
                 <svg aria-hidden="true" width="28" height="6" viewBox="0 0 28 6">

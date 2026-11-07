@@ -65,11 +65,29 @@ export class SupabaseFloodRepository implements FloodRepository {
   }
 
   async corridors(cityId: string): Promise<FeatureCollection> {
-    const { data, error } = await this.db
-      .from("corridors")
-      .select("id, kind, tier, upstream_km2, buildings_at_risk, critical_count, geom")
-      .eq("city_id", cityId);
-    if (error) throw error;
+    // PostgREST caps a response at 1000 rows: page through (a whole city has thousands of corridors)
+    const PAGE = 1000;
+    type Row = {
+      id: number;
+      kind: CorridorProps["kind"];
+      tier: CorridorProps["tier"];
+      upstream_km2: number;
+      buildings_at_risk: number;
+      critical_count: number;
+      geom: unknown;
+    };
+    const data: Row[] = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data: page, error } = await this.db
+        .from("corridors")
+        .select("id, kind, tier, upstream_km2, buildings_at_risk, critical_count, geom")
+        .eq("city_id", cityId)
+        .order("id")
+        .range(from, from + PAGE - 1);
+      if (error) throw error;
+      data.push(...(page ?? []));
+      if (!page || page.length < PAGE) break;
+    }
     return {
       type: "FeatureCollection",
       features: (data ?? []).map((r) => ({
