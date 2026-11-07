@@ -459,6 +459,9 @@ export function Deck() {
           <span className="font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
         </button>
         <div className="flex items-center gap-2">
+          <Link href="/sehirler" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center rounded-xl px-4 text-sm font-semibold sm:inline-flex">
+            Şehirler
+          </Link>
           <Link href="/sinema" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold sm:inline-flex">
             <Play />
             Sinema

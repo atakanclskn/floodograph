@@ -38,7 +38,7 @@ export class Water3DLayer implements CustomLayerInterface {
   /** keep repainting while visible so the water keeps moving */
   animate = true;
 
-  constructor(grid: GridMeta, id = "water", lowPower = false) {
+  constructor(grid: GridMeta, id = "water", lowPower = false, sub?: number) {
     this.id = id;
     const geo = new GridGeo(grid);
     this.geo = geo;
@@ -64,7 +64,7 @@ export class Water3DLayer implements CustomLayerInterface {
       uNorth: { value: new THREE.Vector2(...geo.northAxis) },
     };
     const ground = new Float32Array(n); // flat map
-    const water = createWater(geo, ground, 1, this.shared, { normal: rippleNormalTexture(), foam: foamTexture() }, lowPower ? 1 : 3);
+    const water = createWater(geo, ground, 1, this.shared, { normal: rippleNormalTexture(), foam: foamTexture() }, sub ?? (lowPower || n > 400_000 ? 1 : 3));
     this.scene.add(water);
     const o = geo.origin;
     this.local.makeTranslation(o.x, o.y, 0).scale(new THREE.Vector3(geo.scale, -geo.scale, geo.scale));

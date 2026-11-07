@@ -68,7 +68,7 @@ export function buildBaseStyle(opts: { demTiles: string; contourTiles: string })
         type: "fill",
         source: "omt",
         "source-layer": "water",
-        paint: { "fill-color": "#10232d" },
+        paint: { "fill-color": "#16466e" },
       },
       {
         id: "waterway",

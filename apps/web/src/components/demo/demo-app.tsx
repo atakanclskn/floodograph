@@ -464,6 +464,13 @@ export function DemoApp() {
             3B
           </Toggle>
           <Link
+            href="/sehirler"
+            transitionTypes={["nav-forward"]}
+            className="ml-1 inline-flex min-h-11 items-center rounded-xl px-3.5 text-sm font-semibold transition-colors duration-150 hover:bg-white/10"
+          >
+            Şehirler
+          </Link>
+          <Link
             href="/sinema"
             transitionTypes={["nav-forward"]}
             className="btn-ember ml-1 inline-flex min-h-11 items-center gap-2 rounded-xl bg-ember px-3.5 text-sm font-semibold text-ink active:scale-95"

@@ -199,7 +199,10 @@ export function createBuildings(
       }
       const gMean = gSum / ring.length;
       const base = gMin - 0.8;
-      const roofZ = gMean + Math.max(h || 0, 3);
+      // buildings the water reaches, and higher tiers, stand a little taller: overlapping OSM footprints
+      // would otherwise share a roof height and flicker (z-fighting)
+      const lift = (fw != null ? 1.2 : 0) + (TIER_INDEX[tier] ?? 0) * 0.3;
+      const roofZ = gMean + Math.max(h || 0, 3) + lift;
       const fwv = fw == null ? 1e6 : fw;
       const tierI = TIER_INDEX[tier] ?? 0;
       const u = s,

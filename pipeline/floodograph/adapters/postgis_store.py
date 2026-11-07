@@ -93,7 +93,7 @@ class PostgisStore:
         conn.execute(f"insert into public.{table} ({', '.join(cols)}) select {', '.join(cols)} from {tmp}")
 
     def replace_scenario(self, city: CityConfig, summary: dict, rain_mm: list[float], rain_step_min: int,
-                         impacts, frames_dir, label: str, kind: str = "historical") -> dict:
+                         impacts, frames_dir, label: str, kind: str = "historical", step_min: int = 5) -> dict:
         """Replace one scenario: metadata, rain series, per-building impacts and binary frames."""
         import json
         from pathlib import Path
@@ -110,7 +110,7 @@ class PostgisStore:
                 """insert into public.scenarios (id, city_id, kind, label, rain_source, start_ts, step_min,
                      duration_min, total_mm, total_m3, params, metrics)
                    values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
-                (sid, city.id, kind, label, summary["rain_source"], start, 5,
+                (sid, city.id, kind, label, summary["rain_source"], start, step_min,
                  int(len(rain_mm) * rain_step_min), summary["total_mm"], total_m3,
                  json.dumps({"grid": summary["grid"], "physics": summary["params"]}),
                  json.dumps({**summary["results"], "mass_balance_rel_error": summary["mass_balance"]["relative_error"],

@@ -9,16 +9,14 @@ export const FOG = "#0b1216";
  * (with flood state) are drawn instead, so the basemap ones are filtered out there to avoid doubled walls.
  */
 export function basemapBuildings(exclude?: [number, number][], color = "#1d262b"): never {
-  const outside = exclude
-    ? ["!", ["within", { type: "Polygon", coordinates: [[...exclude, exclude[0]!]] }]]
-    : true;
+  const filter = exclude ? { filter: ["!", ["within", { type: "Polygon", coordinates: [[...exclude, exclude[0]!]] }]] } : {};
   return {
     id: "basemap-buildings",
     type: "fill-extrusion",
     source: "omt",
     "source-layer": "building",
     minzoom: 13,
-    filter: outside,
+    ...filter,
     paint: {
       "fill-extrusion-color": color,
       "fill-extrusion-height": ["coalesce", ["get", "render_height"], 9],
@@ -88,7 +86,7 @@ export function sceneStyle(exclude?: [number, number][]): StyleSpecification {
         type: "fill",
         source: "omt",
         "source-layer": "water",
-        paint: { "fill-color": "#0e2029" },
+        paint: { "fill-color": "#143f63" },
       },
       {
         id: "road-minor",

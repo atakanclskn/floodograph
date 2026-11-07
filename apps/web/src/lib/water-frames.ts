@@ -2,7 +2,7 @@ import { lerpFrames, type FloodRepository, type GridFrame, type GridFrameRef, ty
 
 const NO_VEC = new Float32Array(0);
 /** Decoded frames keep depth and velocity (the 3D water flows along it): 12 bytes per cell. */
-const MEMORY_BUDGET_BYTES = 64 * 1024 * 1024;
+const MEMORY_BUDGET_BYTES = 160 * 1024 * 1024;
 const MAX_CONCURRENT = 4;
 
 /**
@@ -31,7 +31,8 @@ export class FrameStore {
     this.times = refs.map((r) => r.tMin).sort((a, b) => a - b);
     for (const r of refs) if (r.maxDepth != null && r.maxDepth <= 0) this.dry.add(r.tMin);
     const n = grid.nx * grid.ny;
-    this.capacity = Math.max(24, Math.floor(MEMORY_BUDGET_BYTES / (n * 12)));
+    // small pilot grids keep the whole event in memory; a city-wide grid (~1M cells) keeps a dozen frames
+    this.capacity = Math.max(4, Math.min(400, Math.floor(MEMORY_BUDGET_BYTES / (n * 12))));
     this.empty = { tMin: 0, nx: grid.nx, ny: grid.ny, depth: new Float32Array(n), u: NO_VEC, v: NO_VEC };
   }
 

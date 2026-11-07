@@ -22,3 +22,27 @@ ankara:
   rain_point: [39.93, 32.91]
   hydro_buffer_km: 4
   res_m: 10
+
+# Whole-city runs (50 m, buildings as roughness, not walls). The 14 Oct Istanbul rain is applied to all three:
+# "what if the same storm fell here".
+istanbul-kent:
+  name: İstanbul · kentsel alan
+  epsg: 32635
+  bbox: [28.60, 40.90, 29.40, 41.23]
+  rain_point: [41.115, 29.000]
+  hydro_buffer_km: 1
+  res_m: 50
+izmir-kent:
+  name: İzmir · kentsel alan
+  epsg: 32635
+  bbox: [26.98, 38.33, 27.30, 38.52]
+  rain_point: [41.115, 29.000]
+  hydro_buffer_km: 1
+  res_m: 50
+ankara-kent:
+  name: Ankara · kentsel alan
+  epsg: 32636
+  bbox: [32.62, 39.82, 33.00, 40.03]
+  rain_point: [41.115, 29.000]
+  hydro_buffer_km: 1
+  res_m: 50

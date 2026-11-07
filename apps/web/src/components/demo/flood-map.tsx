@@ -107,6 +107,17 @@ const wetColor = (t: number, selectedId: number | null): ExpressionSpecification
     selectedId,
   );
 
+/** Marked buildings stand LIFT m higher than unmarked ones: OSM has nested/overlapping footprints, and a grey
+ * roof at the same height as an orange one flickers through it (z-fighting). */
+const LIFT = 1.5;
+const BASE_H: ExpressionSpecification = ["to-number", ["coalesce", ["get", "h"], 9]];
+const tierHeight = (): ExpressionSpecification => ["+", BASE_H, ["case", ["==", ["get", "ht"], "izle"], 0, LIFT]];
+const wetHeight = (t: number): ExpressionSpecification => [
+  "+",
+  BASE_H,
+  ["case", ["<=", ["to-number", ["coalesce", ["get", "fw"], NEVER]], t], LIFT, 0],
+];
+
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
 
 /** Push buildings and corridors into the map; returns the sorted first-wet minutes. */
@@ -222,7 +233,7 @@ export function FloodMap(props: FloodMapProps) {
           filter: tierFilter(latest.current.activeTiers),
           paint: {
             "fill-extrusion-color": tierColor(null),
-            "fill-extrusion-height": ["coalesce", ["get", "h"], 9],
+            "fill-extrusion-height": tierHeight(),
             "fill-extrusion-base": 0,
             "fill-extrusion-opacity": 0.92,
           },
@@ -360,6 +371,7 @@ export function FloodMap(props: FloodMapProps) {
     if (mode === "static") {
       map.setFilter("buildings", tierFilter(activeTiers));
       map.setPaintProperty("buildings", "fill-extrusion-color", tierColor(sel));
+      map.setPaintProperty("buildings", "fill-extrusion-height", tierHeight());
       return;
     }
     map.setFilter("buildings", null);
@@ -371,6 +383,7 @@ export function FloodMap(props: FloodMapProps) {
       // pin the threshold to the latest fw actually crossed so equal counts give identical expressions
       const tt = n > 0 && fwRef.current ? fwRef.current[n - 1]! : -1;
       map.setPaintProperty("buildings", "fill-extrusion-color", wetColor(tt, sel));
+      map.setPaintProperty("buildings", "fill-extrusion-height", wetHeight(tt));
     };
     apply(usePlayback.getState().t);
     const unsub = usePlayback.subscribe((s) => apply(s.t));

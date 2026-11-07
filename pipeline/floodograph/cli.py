@@ -81,6 +81,35 @@ def cmd_upload_scenario(args: argparse.Namespace) -> None:
     print(json.dumps(res, ensure_ascii=False, indent=2))
 
 
+def cmd_city(args: argparse.Namespace) -> None:
+    """Whole-city run: simulate on the GPU, then (optionally) upload city row + scenario frames."""
+    import geopandas as gpd
+    import pandas as pd
+
+    from .adapters.open_meteo import HistoricalRain
+    from .pipeline.simulate_city import run_city
+
+    for cid in args.city:
+        city = load_cities()[cid]
+        rain = HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
+                              station_note=args.station_note).series(*city.rain_point)
+        sid = f"{cid}-2026-10-14"
+        s = run_city(city, sid, rain, res_m=city.res_m, backend=args.backend)
+        if args.upload:
+            from .adapters.postgis_store import PostgisStore
+
+            store = PostgisStore()
+            empty = gpd.GeoDataFrame({"osm_id": [], "height_m": [], "hand_m": [], "critical": [], "tier": []},
+                                     geometry=[], crs=4326)
+            store.replace_city(city, empty, gpd.GeoDataFrame(geometry=[], crs=4326))
+            out = city.data_dir / "scenarios" / sid
+            imp = pd.DataFrame({"osm_id": [], "first_wet_min": [], "max_depth_m": [], "tier": []})
+            s["uploaded"] = store.replace_scenario(city, s, rain.mm.tolist(), rain.step_min, imp, out / "frames",
+                                                   label=f"14 Ekim 2026 yağışı · {city.name}", step_min=30)
+        s.pop("timeline", None)
+        print(json.dumps(s, ensure_ascii=False, indent=2, default=str), flush=True)
+
+
 def main() -> None:
     p = argparse.ArgumentParser(prog="floodograph")
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -109,6 +138,15 @@ def main() -> None:
     u.add_argument("--station-mm", type=float, default=150.0)
     u.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
     u.set_defaults(func=cmd_upload_scenario)
+    k = sub.add_parser("city", help="Whole-city 50 m simulation of the 14 Oct rain (and upload)")
+    k.add_argument("--city", nargs="+", default=["istanbul-kent", "izmir-kent", "ankara-kent"])
+    k.add_argument("--upload", action="store_true")
+    k.add_argument("--backend", choices=["auto", "cpu", "gpu"], default="auto")
+    k.add_argument("--start", default="2026-10-14T06:00")
+    k.add_argument("--hours", type=int, default=30)
+    k.add_argument("--station-mm", type=float, default=150.0)
+    k.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
+    k.set_defaults(func=cmd_city)
     args = p.parse_args()
     args.func(args)
 
