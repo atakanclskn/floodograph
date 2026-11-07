@@ -10,7 +10,9 @@ export type Key = Shot & {
   chapter?: string;
 };
 
-export const AYAZAGA: LngLat = [29.0175, 41.105];
+/** Ayazağa Deresi corridor (pilot AOI moved north-west); the meydan sits just south-west of it. */
+export const AYAZAGA: LngLat = [29.005, 41.1205];
+export const AYAZAGA_MEYDAN: LngLat = [28.9986, 41.1157];
 
 export type TourPlan = { keys: Key[]; duration: number; chapters: { at: number; title: string; sub: string }[] };
 
@@ -25,7 +27,7 @@ export function buildTour(opts: { center: LngLat; tStart: number; tPeak: number;
   const keys: Key[] = [
     { at: 0, t: tStart, center, zoom: 12.9 + dz, pitch: 48, bearing: -32 },
     { at: 7, t: tStart + (tMid - tStart) * 0.45, center, zoom: 13.5 + dz, pitch: 58, bearing: -12 },
-    { at: 12, t: tMid, center: AYAZAGA, zoom: 15.4 + dz, pitch: 66, bearing: 18 },
+    { at: 12, t: tMid, center: AYAZAGA_MEYDAN, zoom: 15.4 + dz, pitch: 66, bearing: 18 },
     { at: 20, t: tMid + (tPeak - tMid) * 0.55, center: AYAZAGA, zoom: 16.3 + dz, pitch: 72, bearing: 46 },
     { at: 26, t: tPeak - 10, center: peakAt, zoom: 16.9 + dz, pitch: 74, bearing: 78 },
     { at: 34, t: tPeak, center: peakAt, zoom: 17.4 + dz, pitch: 76, bearing: 118 },

@@ -109,24 +109,25 @@ const fragment = /* glsl */ `
     // a slow, unflowing swell breaks the tiling on still water
     vec3 sw = sampleNormal(p * 0.23 + vec2(uTime * 0.6, uTime * 0.35), 9.0, vec2(0.0));
     vec2 nxy = (n0.xy * w0 + n1.xy * w1) * 0.5;
-    float rough = clamp(0.28 + speed * 0.45, 0.28, 1.25);
+    float rough = clamp(0.16 + speed * 0.38, 0.16, 0.95);
     vec3 N = normalize(vec3(nxy * rough + sw.xy * 0.18, 1.0));
 
     vec3 V = normalize(uCam - vPos);
     vec3 L = normalize(uSun);
     float ndv = max(dot(N, V), 0.0);
-    float fres = 0.02 + 0.98 * pow(1.0 - ndv, 5.0);
+    float fres = 0.04 + 0.96 * pow(1.0 - ndv, 5.0);
     vec3 R = reflect(-V, N);
-    vec3 sky = mix(vec3(0.16, 0.19, 0.21), vec3(0.035, 0.05, 0.065), clamp(R.z * 1.6, 0.0, 1.0));
+    vec3 sky = mix(vec3(0.40, 0.45, 0.49), vec3(0.05, 0.07, 0.09), clamp(R.z * 1.2, 0.0, 1.0));
+    sky += vec3(0.28, 0.15, 0.06) * pow(1.0 - clamp(R.z, 0.0, 1.0), 7.0); // warm city glow on the horizon
     float spec = pow(max(dot(R, L), 0.0), 220.0) * 2.2 + pow(max(dot(R, L), 0.0), 18.0) * 0.08;
 
     // turbid flood water: muddy brown when shallow, dark silty olive when deep
-    vec3 shallow = vec3(0.46, 0.34, 0.21);
-    vec3 mid = vec3(0.27, 0.21, 0.14);
-    vec3 deep = vec3(0.075, 0.085, 0.072);
+    vec3 shallow = vec3(0.25, 0.19, 0.12);
+    vec3 mid = vec3(0.14, 0.11, 0.075);
+    vec3 deep = vec3(0.045, 0.05, 0.045);
     vec3 base = mix(shallow, mid, smoothstep(0.03, 0.6, d));
     base = mix(base, deep, smoothstep(0.5, 3.5, d));
-    float diff = 0.45 + 0.55 * max(dot(N, L), 0.0);
+    float diff = 0.55 + 0.45 * max(dot(N, L), 0.0);
     vec3 col = base * diff;
 
     // foam: fast flow, building edges and the advancing front
@@ -143,9 +144,11 @@ const fragment = /* glsl */ `
     float foam = smoothstep(1.0 - amount, 1.12 - amount * 0.7, pattern) * amount;
     col = mix(col, vec3(0.80, 0.77, 0.70) * (0.55 + 0.45 * diff), foam * 0.85);
 
-    col = mix(col, sky, fres * (1.0 - foam)) + spec * vec3(1.0, 0.93, 0.82) * (1.0 - foam);
+    float rim = 1.0 - smoothstep(DRAW_EPS, 0.08, d);
+    col = mix(col, vec3(0.36, 0.29, 0.2), rim * 0.55);
+    col = mix(col, sky, clamp(fres * 1.25, 0.0, 0.85) * (1.0 - foam)) + spec * vec3(1.0, 0.93, 0.82) * (1.0 - foam);
     col = applyFog(col, vPos);
-    float alpha = smoothstep(DRAW_EPS, 0.16, d) * (0.84 + 0.12 * smoothstep(0.2, 2.0, d)) + fres * 0.1 + foam * 0.2;
+    float alpha = smoothstep(DRAW_EPS, 0.09, d) * (0.88 + 0.1 * smoothstep(0.2, 2.0, d)) + fres * 0.1 + foam * 0.2;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
   }
 `;

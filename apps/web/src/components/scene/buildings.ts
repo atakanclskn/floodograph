@@ -86,7 +86,7 @@ const fragment = /* glsl */ `
 
     // reached by water: roof warms toward ember by urgency tier, with a pulse at first contact
     vec3 ember = vec3(1.0, 0.353, 0.169);
-    float tierW = 0.18 + 0.12 * vTier;
+    float tierW = 0.08 + 0.08 * vTier;
     col = mix(col, col * 0.6 + ember * 0.22, vWetK * roof * tierW);
     col += ember * vFlash * (0.25 + 0.5 * roof);
 

@@ -87,7 +87,8 @@ export const D_MAX = 16;
 export const V_MAX = 6;
 const WET_EPS = 0.004;
 
-export type FrameStats = { maxDepth: number; wetHa: number; meanSpeed: number };
+/** maxDepth: absolute maximum (can sit in a single pit cell); p99: 99th percentile of wet-cell depth, the robust "deep water" figure. */
+export type FrameStats = { maxDepth: number; p99: number; wetHa: number; meanSpeed: number };
 
 /** A frame kept sparse (only wet cells), so all 361 frames fit in a few MB. */
 type SparseFrame = { idx: Uint32Array; rgb: Uint8Array; stats: FrameStats };
@@ -98,6 +99,7 @@ function encode(f: GridFrame, resM: number): SparseFrame {
   for (let i = 0; i < n; i++) if (f.depth[i]! > WET_EPS) count++;
   const idx = new Uint32Array(count);
   const rgb = new Uint8Array(count * 3);
+  const hist = new Uint32Array(321); // 5 cm bins up to 16 m
   let k = 0,
     maxDepth = 0,
     wet = 0,
@@ -113,12 +115,21 @@ function encode(f: GridFrame, resM: number): SparseFrame {
     rgb[k * 3 + 2] = Math.round(Math.min(Math.max(0.5 + v / (2 * V_MAX), 0), 1) * 255);
     if (d > maxDepth) maxDepth = d;
     if (d > 0.05) {
+      hist[Math.min(320, Math.floor(d / 0.05))]!++;
       wet++;
       sp += Math.hypot(u, v);
     }
     k++;
   }
-  return { idx, rgb, stats: { maxDepth, wetHa: (wet * resM * resM) / 1e4, meanSpeed: wet ? sp / wet : 0 } };
+  let p99 = 0;
+  for (let b = 320, acc = 0; b >= 0 && wet; b--) {
+    acc += hist[b]!;
+    if (acc >= wet * 0.01) {
+      p99 = (b + 0.5) * 0.05;
+      break;
+    }
+  }
+  return { idx, rgb, stats: { maxDepth, p99, wetHa: (wet * resM * resM) / 1e4, meanSpeed: wet ? sp / wet : 0 } };
 }
 
 export const decodeDepth = (r: number) => (r / 255) ** 2 * D_MAX;

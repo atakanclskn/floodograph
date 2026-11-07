@@ -315,7 +315,7 @@ export function SceneApp() {
               <Rolling value={s.stats.wetBuildings} format={fmtInt} />
               <span className="ml-1.5 text-sm font-normal tracking-normal text-fg-3">/ {fmtInt(s.stats.totalWet)}</span>
             </Stat>
-            <Stat label="En derin su">
+            <Stat label="Derin su · üst %1">
               <Rolling value={s.stats.maxDepth} format={fmtM} />
               <span className="ml-1 text-sm font-normal text-fg-3">m</span>
             </Stat>

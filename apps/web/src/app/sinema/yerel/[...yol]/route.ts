@@ -10,7 +10,7 @@ import path from "node:path";
  */
 const SCENARIO = "istanbul-2026-10-14";
 /** AOI bbox from pipeline/cities.yaml; used only until the simulation writes summary.json. */
-const AOI = { w: 28.985, s: 41.08, e: 29.05, n: 41.13 };
+const AOI = { w: 28.965, s: 41.09, e: 29.04, n: 41.145 };
 
 function dataRoot(): string {
   return path.resolve(/* turbopackIgnore: true */ process.cwd(), process.env.FLOODOGRAPH_DATA_DIR ?? "../../pipeline/data");
