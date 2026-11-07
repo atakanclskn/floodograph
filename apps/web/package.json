@@ -1,0 +1,37 @@
+{
+  "name": "@floodograph/web",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@floodograph/core": "*",
+    "@supabase/supabase-js": "latest",
+    "@tanstack/react-query": "latest",
+    "maplibre-contour": "latest",
+    "maplibre-gl": "latest",
+    "motion": "latest",
+    "next": "16.4.5",
+    "react": "latest",
+    "react-dom": "latest",
+    "recharts": "latest",
+    "three": "latest",
+    "zustand": "latest"
+  },
+  "devDependencies": {
+    "@tailwindcss/turbopack": "latest",
+    "@types/node": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/three": "latest",
+    "eslint": "^10.14.0",
+    "eslint-config-next": "16.4.5",
+    "tailwindcss": "latest",
+    "typescript": "^7.0.2"
+  }
+}
