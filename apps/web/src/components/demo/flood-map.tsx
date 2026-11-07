@@ -118,6 +118,18 @@ const wetHeight = (t: number): ExpressionSpecification => [
   ["case", ["<=", ["to-number", ["coalesce", ["get", "fw"], NEVER]], t], LIFT, 0],
 ];
 
+/** Alarm: once the water has reached them, urgent (orange) and high-priority (yellow) buildings blink. */
+const ALARM_TIERS = ["acil", "yuksek"] as const;
+const NONE: ExpressionSpecification = ["==", ["get", "id"], -1];
+/** Alarmed buildings are drawn ONLY by the alarm layer (taken out of "buildings"), so no wall is drawn twice
+ * (coplanar walls z-fight). The selected building stays in "buildings" and keeps its white highlight. */
+const alarmFilter = (t: number, selectedId: number | null): ExpressionSpecification => [
+  "all",
+  ["<=", ["to-number", ["coalesce", ["get", "fw"], NEVER]], t],
+  ["in", ["get", "tier"], ["literal", [...ALARM_TIERS]]],
+  ["!=", ["get", "id"], selectedId ?? -1],
+];
+
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
 
 /** Push buildings and corridors into the map; returns the sorted first-wet minutes. */
@@ -238,17 +250,29 @@ export function FloodMap(props: FloodMapProps) {
             "fill-extrusion-opacity": 0.92,
           },
         });
+        map.addLayer({
+          id: "alarm",
+          type: "fill-extrusion",
+          source: "buildings",
+          filter: NONE,
+          paint: {
+            "fill-extrusion-color": ["match", ["get", "tier"], "acil", "#ff5a2b", "#ffc23a"],
+            "fill-extrusion-height": ["+", BASE_H, LIFT],
+            "fill-extrusion-base": 0,
+            "fill-extrusion-opacity": 0.95,
+          },
+        });
         map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.32, position: [1.3, 210, 35] });
 
-        map.on("click", "buildings", (e) => {
+        map.on("click", ["buildings", "alarm"], (e) => {
           const f = e.features?.[0];
           latest.current.onSelect(f ? (f.properties as BuildingProps) : null);
         });
         map.on("click", (e) => {
-          if (!map?.queryRenderedFeatures(e.point, { layers: ["buildings"] }).length) latest.current.onSelect(null);
+          if (!map?.queryRenderedFeatures(e.point, { layers: ["buildings", "alarm"] }).length) latest.current.onSelect(null);
         });
-        map.on("mouseenter", "buildings", () => map && (map.getCanvas().style.cursor = "pointer"));
-        map.on("mouseleave", "buildings", () => map && (map.getCanvas().style.cursor = ""));
+        map.on("mouseenter", ["buildings", "alarm"], () => map && (map.getCanvas().style.cursor = "pointer"));
+        map.on("mouseleave", ["buildings", "alarm"], () => map && (map.getCanvas().style.cursor = ""));
         setMapReady(true);
 
         if (!data) return;
@@ -369,12 +393,12 @@ export function FloodMap(props: FloodMapProps) {
     if (!mapReady || !map) return;
     const sel = selectedId;
     if (mode === "static") {
+      map.setFilter("alarm", NONE);
       map.setFilter("buildings", tierFilter(activeTiers));
       map.setPaintProperty("buildings", "fill-extrusion-color", tierColor(sel));
       map.setPaintProperty("buildings", "fill-extrusion-height", tierHeight());
       return;
     }
-    map.setFilter("buildings", null);
     let applied = -1;
     const apply = (t: number) => {
       const n = fwRef.current ? countAtMost(fwRef.current, t) : 0;
@@ -384,11 +408,37 @@ export function FloodMap(props: FloodMapProps) {
       const tt = n > 0 && fwRef.current ? fwRef.current[n - 1]! : -1;
       map.setPaintProperty("buildings", "fill-extrusion-color", wetColor(tt, sel));
       map.setPaintProperty("buildings", "fill-extrusion-height", wetHeight(tt));
+      if (n > 0) {
+        const alarm = alarmFilter(tt, sel);
+        map.setFilter("alarm", alarm);
+        map.setFilter("buildings", ["!", alarm]);
+      } else {
+        map.setFilter("alarm", NONE);
+        map.setFilter("buildings", null);
+      }
     };
     apply(usePlayback.getState().t);
     const unsub = usePlayback.subscribe((s) => apply(s.t));
     return unsub;
   }, [mapReady, mode, activeTiers, selectedId, dataVersion]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map?.getLayer("alarm") || mode !== "scenario") return;
+    if (prefersReducedMotion()) {
+      map.setPaintProperty("alarm", "fill-extrusion-opacity", 0.85);
+      return;
+    }
+    let raf = 0;
+    const t0 = performance.now();
+    const pulse = (now: number) => {
+      raf = requestAnimationFrame(pulse);
+      const s = 0.5 + 0.5 * Math.sin(((now - t0) / 1000) * Math.PI * 2 * 1.3);
+      map.setPaintProperty("alarm", "fill-extrusion-opacity", 0.5 + 0.5 * s);
+    };
+    raf = requestAnimationFrame(pulse);
+    return () => cancelAnimationFrame(raf);
+  }, [mapReady, mode]);
 
   useEffect(() => {
     const map = mapRef.current;

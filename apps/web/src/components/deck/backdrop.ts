@@ -20,7 +20,9 @@ export type Mood = {
 };
 
 const SIZE = 2600;
-const SEG = 260;
+/** phones and other small / coarse-pointer screens get a lighter scene */
+const LITE = typeof window !== "undefined" && (window.matchMedia("(max-width: 767px), (pointer: coarse)").matches || (navigator.hardwareConcurrency ?? 8) <= 4);
+const SEG = LITE ? 170 : 260;
 const HALF = SIZE / 2;
 
 // ------------------------------------------------------------------------------------------- terrain
@@ -278,8 +280,8 @@ export class Backdrop {
     initial: Mood,
     private readonly reduce = false,
   ) {
-    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 1.75));
+    this.renderer = new THREE.WebGLRenderer({ canvas, antialias: !LITE, powerPreference: "high-performance" });
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, LITE ? 1.25 : 1.75));
     this.renderer.setClearColor(0x0a0f12, 1);
     this.camera = new THREE.PerspectiveCamera(42, 1, 1, 6000);
     this.camera.up.set(0, 0, 1);
@@ -368,7 +370,7 @@ export class Backdrop {
     this.scene.add(this.chunkMesh);
 
     // rain
-    const R = 3600;
+    const R = LITE ? 1400 : 3600;
     const seeds = new Float32Array(R * 2 * 3);
     const ends = new Float32Array(R * 2);
     for (let i = 0; i < R; i++) {
@@ -506,6 +508,8 @@ export class Backdrop {
     const h = this.canvas.clientHeight || window.innerHeight;
     this.renderer.setSize(w, h, false);
     this.camera.aspect = w / h;
+    // portrait: widen the vertical field of view so the same shots still frame the river
+    this.camera.fov = w < h ? 62 : 42;
     this.camera.updateProjectionMatrix();
   };
 

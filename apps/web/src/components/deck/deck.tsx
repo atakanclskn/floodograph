@@ -31,7 +31,7 @@ function Title({ children, className = "" }: { children: React.ReactNode; classN
   return (
     <motion.h2
       variants={item}
-      className={`font-display text-[clamp(38px,6vw,88px)] font-semibold leading-[0.95] tracking-[-0.035em] [text-wrap:balance] ${className}`}
+      className={`font-display text-[clamp(28px,min(6vw,9vh),88px)] font-semibold leading-[0.95] tracking-[-0.035em] [text-wrap:balance] ${className}`}
     >
       {children}
     </motion.h2>
@@ -39,19 +39,19 @@ function Title({ children, className = "" }: { children: React.ReactNode; classN
 }
 function Lead({ children }: { children: React.ReactNode }) {
   return (
-    <motion.p variants={item} className="max-w-[620px] text-[clamp(16px,1.5vw,20px)] leading-relaxed text-fg-2">
+    <motion.p variants={item} className="max-w-[620px] text-[clamp(15px,1.5vw,20px)] leading-relaxed text-fg-2">
       {children}
     </motion.p>
   );
 }
 function Stat({ value, unit, label, ember = false, raw }: { value?: number; unit?: string; label: string; ember?: boolean; raw?: string }) {
   return (
-    <motion.div variants={item} className="glass flex flex-col gap-2 rounded-2xl p-5">
-      <p className={`font-mono text-[clamp(30px,3.4vw,48px)] font-medium leading-none tracking-[-0.04em] ${ember ? "text-ember" : "text-fg"}`}>
+    <motion.div variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
+      <p className={`font-mono text-[clamp(24px,3.4vw,48px)] font-medium leading-none tracking-[-0.04em] ${ember ? "text-ember" : "text-fg"}`}>
         {raw ?? <CountUp value={value ?? 0} />}
         {unit && <span className="ml-1.5 text-[0.45em] font-normal tracking-normal text-fg-3">{unit}</span>}
       </p>
-      <p className="text-sm leading-snug text-fg-2">{label}</p>
+      <p className="text-xs leading-snug text-fg-2 sm:text-sm">{label}</p>
     </motion.div>
   );
 }
@@ -105,7 +105,7 @@ const SLIDES: Slide[] = [
           <Image src="/icon.png" alt="" width={40} height={40} priority />
           <span className="font-display text-2xl font-bold tracking-[-0.02em]">floodograph</span>
         </motion.div>
-        <Title className="text-[clamp(44px,7.4vw,112px)]">
+        <Title className="text-[clamp(32px,min(7.4vw,11vh),112px)]">
           Su yolunu her zaman bulur. <span className="text-ember">Biz önce buluruz.</span>
         </Title>
         <Lead>
@@ -170,7 +170,7 @@ const SLIDES: Slide[] = [
       <>
         <Eyebrow n="03">Yöntem</Eyebrow>
         <Title>Yükseklikten dereye, dereden kapıya.</Title>
-        <motion.ol variants={group} className="grid max-w-[980px] gap-3 sm:grid-cols-5">
+        <motion.ol variants={group} className="grid max-w-[980px] gap-2 sm:grid-cols-5 sm:gap-3">
           {[
             ["FABDEM", "Binalardan ve ağaçlardan arındırılmış 30 m yükseklik modeli."],
             ["Dere ağı + HAND", "Akış yönü ve birikim; her binanın en yakın dereden yüksekliği."],
@@ -178,10 +178,10 @@ const SLIDES: Slide[] = [
             ["Sığ su çözücüsü", "2D, HEC-RAS sınıfı denklemler; gerçek yağış, 73 menfez, ekran kartında."],
             ["Aciliyet", "Acil, yüksek, orta, izle. Okul ve hastaneler bir kademe yukarı."],
           ].map(([h, p], i) => (
-            <motion.li key={h} variants={item} className="glass flex flex-col gap-2 rounded-2xl p-4">
+            <motion.li key={h} variants={item} className="glass flex flex-col gap-1 rounded-2xl p-3 sm:gap-2 sm:p-4">
               <span className="font-mono text-xs text-ember">0{i + 1}</span>
-              <span className="font-display text-lg font-semibold leading-tight">{h}</span>
-              <span className="text-[13px] leading-snug text-fg-2">{p}</span>
+              <span className="font-display text-base font-semibold leading-tight sm:text-lg">{h}</span>
+              <span className="text-xs leading-snug text-fg-2 sm:text-[13px]">{p}</span>
             </motion.li>
           ))}
         </motion.ol>
@@ -225,8 +225,8 @@ const SLIDES: Slide[] = [
                 ["Haydar Aliyev Caddesi", "0,06 m · kaçırıldı"],
               ].map(([k, v]) => (
                 <tr key={k} className="border-b border-line last:border-0">
-                  <td className="px-4 py-2.5 text-fg-2">{k}</td>
-                  <td className="px-4 py-2.5 text-right font-mono">{v}</td>
+                  <td className="px-3 py-2 text-[13px] text-fg-2 sm:px-4 sm:py-2.5 sm:text-sm">{k}</td>
+                  <td className="px-3 py-2 text-right font-mono text-[13px] sm:px-4 sm:py-2.5 sm:text-sm">{v}</td>
                 </tr>
               ))}
             </tbody>
@@ -265,15 +265,15 @@ const SLIDES: Slide[] = [
       <>
         <Eyebrow n="07">Kim kullanır</Eyebrow>
         <Title>Haritadan karara.</Title>
-        <motion.div variants={group} className="grid max-w-[960px] gap-3 md:grid-cols-3">
+        <motion.div variants={group} className="grid max-w-[960px] gap-2 md:grid-cols-3 md:gap-3">
           {[
             ["Belediyeler", "İBB AKOM, İZSU: sınırlı bütçeyle önce hangi koridora, hangi okula müdahale edilmeli."],
             ["Şirketler ve bankalar", "TSRS 2, sel dahil fiziksel iklim riskinin raporlanmasını istiyor."],
             ["Afet hazırlığı", "Suyun hangi saatte nereye geleceği: tahliye ve ekip planlaması."],
           ].map(([h, p]) => (
-            <motion.div key={h} variants={item} className="glass flex flex-col gap-2 rounded-2xl p-5">
-              <span className="font-display text-xl font-semibold">{h}</span>
-              <span className="text-sm leading-relaxed text-fg-2">{p}</span>
+            <motion.div key={h} variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
+              <span className="font-display text-lg font-semibold sm:text-xl">{h}</span>
+              <span className="text-[13px] leading-relaxed text-fg-2 sm:text-sm">{p}</span>
             </motion.div>
           ))}
         </motion.div>
@@ -305,7 +305,7 @@ const SLIDES: Slide[] = [
         <Title>Adımızı kedilerimizden aldık: Salep ve Luna.</Title>
         <motion.ul variants={group} className="flex flex-wrap gap-3">
           {["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"].map((n) => (
-            <motion.li key={n} variants={item} className="glass rounded-2xl px-5 py-3 font-display text-lg font-semibold">
+            <motion.li key={n} variants={item} className="glass rounded-2xl px-4 py-2.5 font-display text-base font-semibold sm:px-5 sm:py-3 sm:text-lg">
               {n}
             </motion.li>
           ))}
@@ -362,6 +362,45 @@ export function Deck() {
     [n],
   );
 
+  /** Next/previous for keys and the arrow button: if the slide's own content still has more to show in that
+   * direction, scroll it by most of a page first; change slide only from its edge. */
+  const advance = useCallback(
+    (d: number) => {
+      const sc = document.querySelector<HTMLElement>("[data-deck-scroll]");
+      if (sc) {
+        const more = d > 0 ? sc.scrollTop + sc.clientHeight < sc.scrollHeight - 2 : sc.scrollTop > 2;
+        if (more) {
+          sc.scrollBy({ top: d * sc.clientHeight * 0.8, behavior: reduce ? "auto" : "smooth" });
+          return;
+        }
+      }
+      step(d);
+    },
+    [step, reduce],
+  );
+
+  // overflow cue: fade the bottom edge of a slide whose content continues below
+  useEffect(() => {
+    let raf = 0;
+    const mark = () => {
+      const sc = document.querySelector<HTMLElement>("[data-deck-scroll]");
+      if (sc) sc.dataset.more = sc.scrollTop + sc.clientHeight < sc.scrollHeight - 2 ? "1" : "0";
+    };
+    const onScroll = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(mark);
+    };
+    const t = setTimeout(mark, 700); // after the enter transition
+    document.addEventListener("scroll", onScroll, true);
+    window.addEventListener("resize", onScroll);
+    return () => {
+      clearTimeout(t);
+      cancelAnimationFrame(raf);
+      document.removeEventListener("scroll", onScroll, true);
+      window.removeEventListener("resize", onScroll);
+    };
+  }, [idx]);
+
   // 3D backdrop
   useEffect(() => {
     if (!canvas.current) return;
@@ -401,16 +440,24 @@ export function Deck() {
       if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
       if (["ArrowDown", "PageDown", "ArrowRight"].includes(e.key) || (e.key === " " && !e.shiftKey)) {
         e.preventDefault();
-        step(1);
+        advance(1);
       } else if (["ArrowUp", "PageUp", "ArrowLeft"].includes(e.key) || (e.key === " " && e.shiftKey)) {
         e.preventDefault();
-        step(-1);
+        advance(-1);
       } else if (e.key === "Home") go(0);
       else if (e.key === "End") go(n - 1);
     };
     let acc = 0;
     let accT = 0;
     const onWheel = (e: WheelEvent) => {
+      const sc = (e.target as Element | null)?.closest?.("[data-deck-scroll]") as HTMLElement | null;
+      if (sc && Math.abs(e.deltaY) > 0) {
+        const more = e.deltaY > 0 ? sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1 : sc.scrollTop > 1;
+        if (more) {
+          acc = 0;
+          return; // native scroll inside the slide
+        }
+      }
       e.preventDefault();
       const now = performance.now();
       if (now - accT > 220) acc = 0;
@@ -422,12 +469,28 @@ export function Deck() {
       }
     };
     let y0: number | null = null;
-    const onStart = (e: TouchEvent) => (y0 = e.touches[0]?.clientY ?? null);
+    let x0 = 0;
+    let scrollable: HTMLElement | null = null;
+    let atTop = true;
+    let atBottom = true;
+    const onStart = (e: TouchEvent) => {
+      y0 = e.touches[0]?.clientY ?? null;
+      x0 = e.touches[0]?.clientX ?? 0;
+      scrollable = (e.target as Element | null)?.closest?.("[data-deck-scroll]") ?? null;
+      atTop = !scrollable || scrollable.scrollTop <= 1;
+      atBottom = !scrollable || scrollable.scrollTop + scrollable.clientHeight >= scrollable.scrollHeight - 1;
+    };
     const onEnd = (e: TouchEvent) => {
       if (y0 == null) return;
-      const dy = y0 - (e.changedTouches[0]?.clientY ?? y0);
-      if (Math.abs(dy) > 50) step(dy > 0 ? 1 : -1);
+      const t = e.changedTouches[0];
+      const dy = y0 - (t?.clientY ?? y0);
+      const dx = x0 - (t?.clientX ?? x0);
       y0 = null;
+      if (Math.abs(dy) < 50 || Math.abs(dy) < Math.abs(dx)) return;
+      // inside a slide that scrolls: only change slide from its top / bottom edge
+      if (dy > 0 && !atBottom) return;
+      if (dy < 0 && !atTop) return;
+      step(dy > 0 ? 1 : -1);
     };
     window.addEventListener("keydown", onKey);
     window.addEventListener("wheel", onWheel, { passive: false });
@@ -439,13 +502,13 @@ export function Deck() {
       window.removeEventListener("touchstart", onStart);
       window.removeEventListener("touchend", onEnd);
     };
-  }, [go, step, n]);
+  }, [go, step, advance, n]);
 
   const slide = SLIDES[idx]!;
   const last = idx === n - 1;
 
   return (
-    <div className="fixed inset-0 overflow-hidden bg-ink">
+    <div className="fixed inset-0 touch-pinch-zoom overflow-hidden overscroll-none bg-ink">
       <canvas ref={canvas} className="absolute inset-0 h-full w-full" aria-hidden="true" />
       {/* legibility scrim: content sits on the left */}
       <div
@@ -453,7 +516,7 @@ export function Deck() {
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(10_15_18/0.92)_0%,rgb(10_15_18/0.7)_38%,rgb(10_15_18/0.05)_75%)] max-md:bg-[linear-gradient(180deg,rgb(10_15_18/0.35)_0%,rgb(10_15_18/0.9)_55%)]"
       />
 
-      <header className="absolute inset-x-4 top-4 z-20 flex items-center justify-between sm:inset-x-8">
+      <header className="absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center justify-between sm:left-[max(2rem,env(safe-area-inset-left))] sm:right-[max(2rem,env(safe-area-inset-right))]">
         <button type="button" onClick={() => go(0)} className="glass flex items-center gap-2.5 rounded-2xl py-2 pl-2.5 pr-4">
           <Image src="/icon.png" alt="" width={26} height={26} />
           <span className="font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
@@ -472,7 +535,7 @@ export function Deck() {
         </div>
       </header>
 
-      <main className="relative z-10 flex h-full items-center px-5 sm:px-10 lg:px-20 max-md:items-end max-md:pb-28">
+      <main className="relative z-10 flex h-full items-center pb-[calc(6.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(5rem+env(safe-area-inset-top))] sm:pl-[max(2.5rem,env(safe-area-inset-left))] sm:pr-[max(2.5rem,env(safe-area-inset-right))] lg:pl-20 lg:pr-20 max-md:items-end">
         <AnimatePresence mode="wait" custom={dir} initial={false}>
           <motion.section
             key={slide.id}
@@ -492,9 +555,10 @@ export function Deck() {
                 transition: { duration: 0.35, ease: [0.4, 0, 1, 1] },
               }),
             }}
-            className="flex w-full max-w-[1100px] flex-col gap-6"
+            data-deck-scroll
+            className="flex max-h-full w-full max-w-[1100px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none] data-[more=1]:[mask-image:linear-gradient(to_bottom,black_82%,transparent)]"
           >
-            <motion.div variants={group} initial="hidden" animate="show" className="flex flex-col gap-6">
+            <motion.div variants={group} initial="hidden" animate="show" className="flex flex-col gap-4 sm:gap-6">
               {slide.body()}
             </motion.div>
           </motion.section>
@@ -522,10 +586,10 @@ export function Deck() {
         ))}
       </nav>
 
-      <div className="absolute inset-x-0 bottom-5 z-20 flex flex-col items-center gap-2">
+      <div className="absolute inset-x-0 bottom-[calc(1rem+env(safe-area-inset-bottom))] z-20 flex flex-col items-center gap-2">
         <button
           type="button"
-          onClick={() => (last ? go(0) : step(1))}
+          onClick={() => (last ? go(0) : advance(1))}
           aria-label={last ? "Başa dön" : "Sonraki slayt"}
           className="glass flex size-12 items-center justify-center rounded-full transition-transform duration-150 hover:scale-105 active:scale-95"
         >

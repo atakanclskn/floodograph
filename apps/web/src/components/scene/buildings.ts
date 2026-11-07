@@ -84,6 +84,8 @@ const fragment = /* glsl */ `
   uniform vec3 uSun;
   uniform float uSimT;
   uniform float uNight;
+  uniform float uTime;
+  uniform float uBlink; // 1 = blink, 0 = steady (prefers-reduced-motion)
   varying vec3 vPos;
   varying float vAbove;
   varying float vWetLine;
@@ -125,6 +127,15 @@ const fragment = /* glsl */ `
     float tierW = 0.08 + 0.08 * vTier;
     col = mix(col, col * 0.6 + ember * 0.22, vWetK * roof * tierW);
     col += ember * vFlash * (0.25 + 0.5 * roof);
+
+    // alarm: once the water reaches an urgent (orange) or high-priority (yellow) building, it keeps blinking
+    float isAcil = step(2.5, vTier);
+    float isHigh = step(1.5, vTier) * (1.0 - isAcil);
+    float alarmOn = step(0.0001, vWetK) * (isAcil + isHigh);
+    float blink = mix(0.6, 0.5 + 0.5 * sin(uTime * 8.2), uBlink);
+    vec3 alarmCol = mix(vec3(1.0, 0.78, 0.22), vec3(1.0, 0.36, 0.14), isAcil);
+    col = mix(col, alarmCol * (0.55 + 0.45 * diff), alarmOn * (0.3 + 0.6 * blink));
+    col += alarmCol * alarmOn * blink * 0.35;
 
     // damaged / destroyed: broken concrete and mud, a few cracks catching the ember light
     float grit = hash(floor(vPos.xy * 1.3) + floor(vPos.z * 1.3));
@@ -275,7 +286,11 @@ export function createBuildings(
   const mat = new THREE.ShaderMaterial({
     vertexShader: vertex,
     fragmentShader: fragment,
-    uniforms: { ...shared, uNight: night },
+    uniforms: {
+      ...shared,
+      uNight: night,
+      uBlink: { value: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : 1 },
+    },
     side: THREE.DoubleSide,
   });
   const mesh = new THREE.Mesh(geom, mat);
