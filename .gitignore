@@ -35,3 +35,5 @@ next-env.d.ts
 pipeline/.venv/
 pipeline/data/
 pipeline/.env
+pipeline/.loader_pw
+pipeline/.loader_verifier
