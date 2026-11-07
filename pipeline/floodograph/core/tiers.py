@@ -22,3 +22,20 @@ def tier_index(hand_m: np.ndarray, critical: np.ndarray) -> np.ndarray:
 
 def tier_names(idx: np.ndarray) -> np.ndarray:
     return np.asarray(TIERS, dtype=object)[idx]
+
+
+def scenario_tier_index(max_depth_m: np.ndarray, critical: np.ndarray, static_idx: np.ndarray) -> np.ndarray:
+    """Tier for a simulated event (depth at the building walls), falling back to the static HAND tier.
+
+    acil   >= 0.5 m at the walls (ground floors flooded, cars float), or >= 0.15 m at a critical facility
+    yuksek >= 0.15 m (water reached the building)
+    orta   stayed dry this time, but HAND says acil/yuksek (exposed in a bigger event)
+    izle   otherwise
+    """
+    md = np.nan_to_num(np.asarray(max_depth_m, dtype=np.float64))
+    crit = np.asarray(critical, dtype=bool)
+    idx = np.full(md.shape, 3, dtype=np.int8)
+    idx[np.asarray(static_idx) <= 1] = 2
+    idx[md >= 0.15] = 1
+    idx[(md >= 0.5) | ((md >= 0.15) & crit)] = 0
+    return idx

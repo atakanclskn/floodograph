@@ -81,3 +81,52 @@ class PostgisStore:
             n_b = conn.execute("select count(*) from public.buildings where city_id=%s", (city.id,)).fetchone()[0]
             n_c = conn.execute("select count(*) from public.corridors where city_id=%s", (city.id,)).fetchone()[0]
         return {"buildings": n_b, "corridors": n_c}
+
+    @staticmethod
+    def _stage_copy(conn, table: str, cols: list[str], rows) -> None:
+        """COPY into a temp clone (RLS forbids COPY on the real table), then INSERT ... SELECT."""
+        tmp = f"_stage_{table}"
+        conn.execute(f"create temp table {tmp} (like public.{table} including defaults) on commit drop")
+        with conn.cursor().copy(f"copy {tmp} ({', '.join(cols)}) from stdin") as cp:
+            for r in rows:
+                cp.write_row(r)
+        conn.execute(f"insert into public.{table} ({', '.join(cols)}) select {', '.join(cols)} from {tmp}")
+
+    def replace_scenario(self, city: CityConfig, summary: dict, rain_mm: list[float], rain_step_min: int,
+                         impacts, frames_dir, label: str, kind: str = "historical") -> dict:
+        """Replace one scenario: metadata, rain series, per-building impacts and binary frames."""
+        import json
+        from pathlib import Path
+
+        sid = summary["scenario"]
+        aoi_m2 = gpd.GeoSeries([box(*city.bbox)], crs=4326).to_crs(city.epsg).area.iloc[0]
+        total_m3 = summary["total_mm"] / 1000 * aoi_m2
+        start = None if summary["start"] == "design" else summary["start"] + ":00+03:00"
+        timeline = {x["t_min"]: x for x in summary.get("timeline", [])}
+        frames = sorted(Path(frames_dir).glob("*.bin"), key=lambda p: int(p.stem))
+        with psycopg.connect(self.url) as conn, conn.transaction():
+            conn.execute("delete from public.scenarios where id = %s", (sid,))
+            conn.execute(
+                """insert into public.scenarios (id, city_id, kind, label, rain_source, start_ts, step_min,
+                     duration_min, total_mm, total_m3, params, metrics)
+                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)""",
+                (sid, city.id, kind, label, summary["rain_source"], start, 5,
+                 int(len(rain_mm) * rain_step_min), summary["total_mm"], total_m3,
+                 json.dumps({"grid": summary["grid"], "physics": summary["params"]}),
+                 json.dumps({**summary["results"], "mass_balance_rel_error": summary["mass_balance"]["relative_error"],
+                             "peak_mm_h": summary["peak_mm_h"]})),
+            )
+            self._stage_copy(conn, "rain_series", ["scenario_id", "t_min", "mm"],
+                             ((sid, i * rain_step_min, float(v)) for i, v in enumerate(rain_mm)))
+            self._stage_copy(
+                conn, "building_impacts", ["scenario_id", "building_id", "first_wet_min", "max_depth_m", "tier"],
+                ((sid, int(r.osm_id), None if r.first_wet_min != r.first_wet_min else int(r.first_wet_min),
+                  float(r.max_depth_m), r.tier) for r in impacts.itertuples(index=False)))
+            self._stage_copy(
+                conn, "grid_frames", ["scenario_id", "t_min", "storage_path", "max_depth", "wet_cells", "data"],
+                ((sid, int(p.stem), "db", float(timeline.get(int(p.stem), {}).get("max_depth", 0.0)),
+                  0, p.read_bytes()) for p in frames))
+            n = conn.execute("select count(*), coalesce(sum(length(data)),0) from public.grid_frames where scenario_id=%s",
+                             (sid,)).fetchone()
+            nb = conn.execute("select count(*) from public.building_impacts where scenario_id=%s", (sid,)).fetchone()[0]
+        return {"frames": n[0], "frames_mb": round(n[1] / 1e6, 1), "impacts": nb}
