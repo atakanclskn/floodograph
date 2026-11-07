@@ -136,7 +136,13 @@ def _encode_frame(st: swe2d.State, t_min: int, win: tuple[slice, slice]) -> byte
 
 
 def run_scenario(city: CityConfig, scenario_id: str, rain: RainSeries, res_m: float = 20.0,
-                 hours: float | None = None, output_every_s: float = 300.0, write_frames: bool = True) -> dict:
+                 hours: float | None = None, output_every_s: float = 300.0, write_frames: bool = True,
+                 backend: str = "auto") -> dict:
+    """backend: "cpu" (numba reference), "gpu" (CUDA port) or "auto" (GPU when available)."""
+    from ..core import swe2d_gpu
+
+    use_gpu = backend == "gpu" or (backend == "auto" and swe2d_gpu.available())
+    solve = swe2d_gpu.run if use_gpu else swe2d.run
     t0 = time.time()
     sd = build_domain(city, res_m)
     d = sd.domain
@@ -168,7 +174,7 @@ def run_scenario(city: CityConfig, scenario_id: str, rain: RainSeries, res_m: fl
 
     events = np.full(d.culvert_qcap.shape[0], np.nan)
     t_end = (hours if hours is not None else rain.mm.size * rain.step_min / 60) * 3600
-    bal = swe2d.run(d, st, rain.intensity_mps, t_end, on_output=on_output,
+    bal = solve(d, st, rain.intensity_mps, t_end, on_output=on_output,
                     output_every=output_every_s, culvert_events=events)
 
     stored = float(st.h.sum() * d.dx**2)
@@ -209,6 +215,7 @@ def run_scenario(city: CityConfig, scenario_id: str, rain: RainSeries, res_m: fl
         },
         "timeline": timeline,
         "seconds": round(time.time() - t0, 1),
+        "solver": swe2d_gpu.describe() if use_gpu else "cpu (numba)",
     }
     (out / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2), encoding="utf-8")
     return summary

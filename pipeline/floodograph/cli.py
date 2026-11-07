@@ -51,7 +51,7 @@ def cmd_simulate(args: argparse.Namespace) -> None:
     city = load_cities()[args.city]
     rain = HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
                           station_note=args.station_note).series(*city.rain_point)
-    s = run_scenario(city, args.scenario, rain, res_m=args.res)
+    s = run_scenario(city, args.scenario, rain, res_m=args.res, backend=args.backend)
     s.pop("timeline", None)
     print(json.dumps(s, ensure_ascii=False, indent=2, default=str))
 
@@ -97,6 +97,8 @@ def main() -> None:
     m.add_argument("--station-mm", type=float, default=150.0)
     m.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
     m.add_argument("--res", type=float, default=20.0)
+    m.add_argument("--backend", choices=["auto", "cpu", "gpu"], default="auto",
+                   help="solver: CUDA when available (auto), or force the numba CPU reference")
     m.set_defaults(func=cmd_simulate)
     u = sub.add_parser("upload-scenario", help="Upload a simulated scenario (impacts, rain, frames) to Supabase")
     u.add_argument("--city", default="istanbul")
