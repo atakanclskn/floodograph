@@ -176,7 +176,7 @@ export class FloodEngine {
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const map = new maplibregl.Map({
         container: this.container,
-        style: sceneStyle(),
+        style: sceneStyle(geo.corners),
         center: geo.center,
         zoom: this.narrow ? 12.2 : 12.9,
         pitch: 48,

@@ -4,7 +4,31 @@ import { TERRARIUM_URL } from "./terrain";
 /** Night-quiet base for the cinematic scene: terrain, water, a hint of roads. The flood carries the colour. */
 export const FOG = "#0b1216";
 
-export function sceneStyle(): StyleSpecification {
+/**
+ * Every OSM building in the country as a 3D extrusion (OpenFreeMap). Inside the simulation grid our own buildings
+ * (with flood state) are drawn instead, so the basemap ones are filtered out there to avoid doubled walls.
+ */
+export function basemapBuildings(exclude?: [number, number][], color = "#1d262b"): never {
+  const outside = exclude
+    ? ["!", ["within", { type: "Polygon", coordinates: [[...exclude, exclude[0]!]] }]]
+    : true;
+  return {
+    id: "basemap-buildings",
+    type: "fill-extrusion",
+    source: "omt",
+    "source-layer": "building",
+    minzoom: 13,
+    filter: outside,
+    paint: {
+      "fill-extrusion-color": color,
+      "fill-extrusion-height": ["coalesce", ["get", "render_height"], 9],
+      "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+      "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0, 14, 0.95],
+    },
+  } as never;
+}
+
+export function sceneStyle(exclude?: [number, number][]): StyleSpecification {
   const dem = { type: "raster-dem" as const, encoding: "terrarium" as const, tiles: [TERRARIUM_URL], tileSize: 256, maxzoom: 15 };
   const road = (classes: string[]) => ["match", ["get", "class"], classes, true, false] as never;
   return {
@@ -101,6 +125,7 @@ export function sceneStyle(): StyleSpecification {
           "line-width": ["interpolate", ["exponential", 1.6], ["zoom"], 11, 0.6, 18, 6],
         },
       },
+      basemapBuildings(exclude),
       {
         id: "place-label",
         type: "symbol",

@@ -1,9 +1,18 @@
+import { basemapBuildings } from "@/components/scene/scene-style";
 import type { StyleSpecification } from "maplibre-gl";
 
 /**
  * Our own minimal dark style over OpenFreeMap vector tiles (OpenMapTiles schema).
  * Kept quiet on purpose: terrain, water and roads only; our data carries the colour.
  */
+/** The pilot area our own analysed buildings cover; outside it the basemap's 3D buildings are shown. */
+const PILOT_RING: [number, number][] = [
+  [28.965, 41.09],
+  [29.04, 41.09],
+  [29.04, 41.145],
+  [28.965, 41.145],
+];
+
 export function buildBaseStyle(opts: { demTiles: string; contourTiles: string }): StyleSpecification {
   const road = (classes: string[]) => ["match", ["get", "class"], classes, true, false];
   return {
@@ -122,6 +131,7 @@ export function buildBaseStyle(opts: { demTiles: string; contourTiles: string })
         },
         paint: { "text-color": "rgba(150,190,212,0.75)", "text-halo-color": "#0b1115", "text-halo-width": 1.2 },
       },
+      basemapBuildings(PILOT_RING, "#232d33"),
       {
         id: "place-label",
         type: "symbol",
