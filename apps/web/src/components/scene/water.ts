@@ -79,15 +79,20 @@ const vertex = /* glsl */ `
     // Surface waves travelling WITH the modelled current (visual detail the 20 m model does not resolve):
     // wavelength and celerity grow with local speed, crests are sharpened so fast water reads as a torrent.
     float wet = smoothstep(DRAW_EPS, 0.4, d);
-    float lam = 6.0 + 2.6 * sp;
-    float ph = dot(p, dir) * 6.2832 / lam - uTime * (1.4 + 1.25 * sp) + 0.8 * sin(dot(p, nrm) * 0.17 + uTime * 0.5);
-    float crest = pow(0.5 + 0.5 * sin(ph), 3.0);
-    float xw = sin(dot(p, nrm) * 0.55 + dot(p, dir) * 0.21 - uTime * 1.7);
-    float amp = wet * min(0.04 + 0.17 * sp, 0.65) * min(d * 1.3, 1.0);
+    // Geometry carries only long waves (>= 4 vertex spacings, or they alias into moire); short ones live in the normals.
+    float lam = 28.0 + 9.0 * sp;
+    float ph = dot(p, dir) * 6.2832 / lam - uTime * (0.9 + 0.8 * sp) + 0.9 * sin(dot(p, nrm) * 0.06 + uTime * 0.35);
+    float crest = pow(0.5 + 0.5 * sin(ph), 2.2);
+    float xw = sin(dot(p, nrm) * 0.13 + dot(p, dir) * 0.05 - uTime * 0.9);
+    float amp = wet * min(0.04 + 0.14 * sp, 0.5) * min(d * 1.2, 1.0);
     // stagnation head where the current runs into a wall: v^2 / 2g, the height moving water piles up to
     float m = texture2D(uMask, uv).r;
     float heap = smoothstep(0.04, 0.4, m) * (1.0 - smoothstep(0.6, 0.95, m)) * min(sp * sp / 19.62, 1.4) * wet;
-    float surf = d + uLift + amp * (crest * 1.7 - 0.45) + amp * 0.3 * xw + heap;
+    // The model's deepest cells are pits of its own DEM (quarries, culvert inlets) that the rendered Terrarium
+    // ground does not have: draped on that ground, 10 m of water would stand up as a hill. Compress depth above
+    // 2.5 m for the drawn surface only (colour, stats and objects still use the true depth).
+    float dv = d < 2.5 ? d : 2.5 + (d - 2.5) * 0.12;
+    float surf = dv + uLift + amp * (crest * 1.2 - 0.35) + amp * 0.45 * xw + heap;
     vec3 pos = vec3(p, aGround + (d > DRAW_EPS ? surf : -0.9));
     vUv = uv;
     vPos = pos;
@@ -129,26 +134,35 @@ const fragment = /* glsl */ `
     float scroll = uTime * (0.25 + sp * 0.9);
     vec2 r1 = texture2D(uNormalTex, vec2((q.x - scroll) / (16.0 * stretch), q.y / 16.0)).xy * 2.0 - 1.0;
     vec2 r2 = texture2D(uNormalTex, vec2((q.x - scroll * 1.6) / (6.5 * stretch), q.y / 6.5 + 0.37)).xy * 2.0 - 1.0;
-    vec2 rip = (r1 * 0.6 + r2 * 0.4) * (0.35 + min(sp, 3.0) * 0.25);
-    vec2 ripW = rip.x * dir + rip.y * nrm;
-    vec3 N = normalize(vec3(Ng.xy + ripW * 0.55, Ng.z));
-
     vec3 V = normalize(uCam - vPos);
+    float dist = distance(uCam, vPos);
+    float near = 1.0 - smoothstep(180.0, 1100.0, dist); // fade fine detail with distance (it only shimmers far off)
+    vec2 rip = (r1 * 0.6 + r2 * 0.4) * (0.4 + min(sp, 3.0) * 0.3) * near;
+    vec2 ripW = rip.x * dir + rip.y * nrm;
+    vec3 N = normalize(vec3(Ng.xy + ripW * 0.6, Ng.z));
+
     vec3 L = normalize(uSun);
     float ndv = max(dot(N, V), 0.0);
-    float fres = 0.03 + 0.97 * pow(1.0 - ndv, 5.0);
+    float fres = 0.06 + 0.94 * pow(1.0 - ndv, 4.0);
     vec3 R = reflect(-V, N);
-    vec3 sky = mix(vec3(0.34, 0.37, 0.42), vec3(0.08, 0.10, 0.13), clamp(R.z * 1.3, 0.0, 1.0));
-    sky += vec3(0.42, 0.22, 0.08) * pow(1.0 - clamp(R.z, 0.0, 1.0), 6.0); // warm street-light glow on the horizon
-    float spec = pow(max(dot(R, L), 0.0), 70.0) * 0.55 + pow(max(dot(R, L), 0.0), 8.0) * 0.06;
+    // night sky over a lit city: dark zenith, sodium-orange glow toward the horizon
+    float rz = clamp(R.z, 0.0, 1.0);
+    vec3 sky = mix(vec3(0.62, 0.36, 0.16), vec3(0.05, 0.065, 0.09), smoothstep(0.0, 0.45, rz));
+    // reflected city lights: sparse warm glints that shimmer as the ripples move
+    vec2 rd = R.xy / max(rz + 0.12, 0.05);
+    vec2 cell = floor(rd * 22.0);
+    float lampH = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
+    float lamp = step(0.965, lampH) * smoothstep(0.42, 0.0, length(fract(rd * 22.0) - 0.5)) * (1.0 - smoothstep(0.05, 0.5, rz));
+    sky += vec3(1.0, 0.7, 0.38) * lamp * 2.2;
+    float spec = pow(max(dot(R, L), 0.0), 90.0) * 0.5;
 
-    // turbid flood water: milky clay-brown when shallow, dark chocolate when deep
-    vec3 shallow = vec3(0.47, 0.36, 0.23);
-    vec3 mid = vec3(0.31, 0.22, 0.13);
-    vec3 deep = vec3(0.14, 0.10, 0.065);
-    vec3 base = mix(shallow, mid, smoothstep(0.05, 0.8, d));
-    base = mix(base, deep, smoothstep(0.8, 4.0, d));
-    float diff = 0.5 + 0.5 * max(dot(N, L), 0.0);
+    // turbid flood water: clay-brown when shallow, near-black chocolate when deep; mostly seen by what it reflects
+    vec3 shallow = vec3(0.30, 0.225, 0.14);
+    vec3 mid = vec3(0.16, 0.115, 0.07);
+    vec3 deep = vec3(0.06, 0.045, 0.03);
+    vec3 base = mix(shallow, mid, smoothstep(0.05, 0.7, d));
+    base = mix(base, deep, smoothstep(0.7, 3.5, d));
+    float diff = 0.45 + 0.35 * max(dot(N, L), 0.0);
     vec3 col = base * diff;
 
     // foam streaks drawn out along the current, travelling with it
@@ -167,11 +181,11 @@ const fragment = /* glsl */ `
     float foam = smoothstep(1.0 - amount, 1.15 - amount * 0.6, streak) * amount;
     // a faint grain of silt so even calm-looking water shows which way it moves
     float silt = smoothstep(0.55, 0.9, streak) * 0.12 * smoothstep(0.1, 0.8, sp);
-    col = mix(col, vec3(0.86, 0.82, 0.74) * (0.6 + 0.4 * diff), clamp(foam * 0.92 + silt, 0.0, 1.0));
+    col = mix(col, vec3(0.74, 0.70, 0.62) * (0.65 + 0.35 * diff), clamp(foam * 0.92 + silt, 0.0, 1.0));
 
     float rim = 1.0 - smoothstep(DRAW_EPS, 0.1, d);
-    col = mix(col, vec3(0.40, 0.31, 0.2), rim * 0.5);
-    col = mix(col, sky, clamp(fres * 1.1, 0.0, 0.7) * (1.0 - foam)) + spec * vec3(1.0, 0.9, 0.75) * (1.0 - foam);
+    col = mix(col, vec3(0.26, 0.2, 0.13), rim * 0.5);
+    col = mix(col, sky, clamp(fres, 0.0, 0.85) * (1.0 - foam)) + spec * vec3(1.0, 0.9, 0.75) * (1.0 - foam);
     col = applyFog(col, vPos);
     float alpha = smoothstep(DRAW_EPS, 0.1, d) * 0.94 + fres * 0.05 + foam * 0.1;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
