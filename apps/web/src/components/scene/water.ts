@@ -150,21 +150,21 @@ const fragment = /* glsl */ `
     float ndv = max(dot(N, V), 0.0);
     float fres = 0.06 + 0.94 * pow(1.0 - ndv, 4.0);
     vec3 R = reflect(-V, N);
-    // night sky over a lit city: dark zenith, sodium-orange glow toward the horizon
+    // night sky over a lit city: dark blue zenith, a pale glow toward the horizon
     float rz = clamp(R.z, 0.0, 1.0);
-    vec3 sky = mix(vec3(0.62, 0.36, 0.16), vec3(0.05, 0.065, 0.09), smoothstep(0.0, 0.45, rz));
+    vec3 sky = mix(vec3(0.42, 0.58, 0.70), vec3(0.04, 0.08, 0.13), smoothstep(0.0, 0.45, rz));
     // reflected city lights: sparse warm glints that shimmer as the ripples move
     vec2 rd = R.xy / max(rz + 0.12, 0.05);
     vec2 cell = floor(rd * 22.0);
     float lampH = fract(sin(dot(cell, vec2(127.1, 311.7))) * 43758.5453);
     float lamp = step(0.965, lampH) * smoothstep(0.42, 0.0, length(fract(rd * 22.0) - 0.5)) * (1.0 - smoothstep(0.05, 0.5, rz));
-    sky += vec3(1.0, 0.7, 0.38) * lamp * 2.2;
+    sky += vec3(0.85, 0.92, 1.0) * lamp * 1.8;
     float spec = pow(max(dot(R, L), 0.0), 90.0) * 0.5;
 
-    // turbid flood water: clay-brown when shallow, near-black chocolate when deep; mostly seen by what it reflects
-    vec3 shallow = vec3(0.62, 0.45, 0.24);
-    vec3 mid = vec3(0.46, 0.31, 0.15);
-    vec3 deep = vec3(0.27, 0.17, 0.08);
+    // flood water: bright blue when shallow, deep navy where deep
+    vec3 shallow = vec3(0.40, 0.70, 0.88);
+    vec3 mid = vec3(0.18, 0.46, 0.68);
+    vec3 deep = vec3(0.06, 0.22, 0.40);
     vec3 base = mix(shallow, mid, smoothstep(0.05, 0.7, d));
     base = mix(base, deep, smoothstep(0.7, 3.5, d));
     float diff = 0.62 + 0.38 * max(dot(N, L), 0.0);
@@ -186,10 +186,10 @@ const fragment = /* glsl */ `
     float foam = smoothstep(1.0 - amount, 1.15 - amount * 0.6, streak) * amount;
     // a faint grain of silt so even calm-looking water shows which way it moves
     float silt = smoothstep(0.55, 0.9, streak) * 0.12 * smoothstep(0.1, 0.8, sp);
-    col = mix(col, vec3(0.74, 0.70, 0.62) * (0.65 + 0.35 * diff), clamp(foam * 0.92 + silt, 0.0, 1.0));
+    col = mix(col, vec3(0.86, 0.93, 0.97) * (0.65 + 0.35 * diff), clamp(foam * 0.92 + silt, 0.0, 1.0));
 
     float rim = 1.0 - smoothstep(DRAW_EPS, 0.1, d);
-    col = mix(col, vec3(0.70, 0.55, 0.34), rim * 0.45);
+    col = mix(col, vec3(0.62, 0.84, 0.95), rim * 0.45);
     col = mix(col, sky, clamp(fres * 0.75, 0.0, 0.55) * (1.0 - foam)) + spec * vec3(1.0, 0.9, 0.75) * (1.0 - foam);
     col = applyFog(col, vPos);
     float alpha = smoothstep(DRAW_EPS, 0.1, d) * 0.97 + fres * 0.03 + foam * 0.1;

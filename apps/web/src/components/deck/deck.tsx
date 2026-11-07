@@ -5,7 +5,7 @@ import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CountUp } from "@/components/count-up";
-import { Backdrop, type Mood } from "./backdrop";
+import { Backdrop, riverShot, type Mood } from "./backdrop";
 
 /* ------------------------------------------------------------------------------------------------ content */
 
@@ -98,7 +98,7 @@ const SLIDES: Slide[] = [
   {
     id: "kapak",
     nav: "Floodograph",
-    mood: { cam: [-950, -820, 560], look: [120, 40, -10], water: -30, rain: 0.15, buried: 0.55, contour: 0.6, ember: 0 },
+    mood: { ...riverShot(-700, { dx: -650, dy: -700, dz: 520 }), depth: 3, rain: 0.1, buried: 0.5, contour: 0.6, ember: 0 },
     body: () => (
       <>
         <motion.div variants={item} className="flex items-center gap-3">
@@ -122,7 +122,7 @@ const SLIDES: Slide[] = [
   {
     id: "14-ekim",
     nav: "14 Ekim",
-    mood: { cam: [-380, -560, 120], look: [200, 60, 20], water: -12, rain: 1, buried: 0.15, contour: 0.35, ember: 0.2 },
+    mood: { ...riverShot(-420, { dx: -260, dy: -320, dz: 150, lookZ: 20 }), depth: 5.5, rain: 1, buried: 0.15, contour: 0.35, ember: 0.15 },
     body: () => (
       <>
         <Eyebrow n="01">14 Ekim 2026 · İstanbul</Eyebrow>
@@ -143,7 +143,7 @@ const SLIDES: Slide[] = [
   {
     id: "problem",
     nav: "Gömülü dereler",
-    mood: { cam: [150, -260, 980], look: [150, 40, -30], water: -36, rain: 0, buried: 1, contour: 0.85, ember: 0 },
+    mood: { ...riverShot(-120, { dx: -40, dy: -120, dz: 850 }), depth: 3, rain: 0, buried: 1, contour: 0.85, ember: 0 },
     body: () => (
       <>
         <Eyebrow n="02">Problem</Eyebrow>
@@ -165,7 +165,7 @@ const SLIDES: Slide[] = [
   {
     id: "yontem",
     nav: "Yöntem",
-    mood: { cam: [-200, 380, 420], look: [260, -40, -20], water: -24, rain: 0, buried: 0.5, contour: 1, ember: 0 },
+    mood: { ...riverShot(150, { dx: -260, dy: 420, dz: 360 }), depth: 4.5, rain: 0.3, buried: 0.5, contour: 1, ember: 0 },
     body: () => (
       <>
         <Eyebrow n="03">Yöntem</Eyebrow>
@@ -191,7 +191,7 @@ const SLIDES: Slide[] = [
   {
     id: "sonuc",
     nav: "Sonuçlar",
-    mood: { cam: [-620, -420, 300], look: [180, 40, 0], water: 10, rain: 0.45, buried: 0.2, contour: 0.4, ember: 0.85 },
+    mood: { ...riverShot(420, { dx: -260, dy: -260, dz: 110, lookZ: 4 }), depth: 11, rain: 0.6, buried: 0.15, contour: 0.4, ember: 0.8 },
     body: () => (
       <>
         <Eyebrow n="04">14 Ekim simülasyonu · Sarıyer pilotu</Eyebrow>
@@ -209,7 +209,7 @@ const SLIDES: Slide[] = [
   {
     id: "dogrulama",
     nav: "Doğrulama",
-    mood: { cam: [520, -640, 380], look: [-60, 60, 0], water: -8, rain: 0.2, buried: 0.25, contour: 0.55, ember: 0.3 },
+    mood: { ...riverShot(650, { dx: 220, dy: -420, dz: 260 }), depth: 10, rain: 0.4, buried: 0.2, contour: 0.5, ember: 0.4 },
     body: () => (
       <>
         <Eyebrow n="05">Doğrulama</Eyebrow>
@@ -242,7 +242,7 @@ const SLIDES: Slide[] = [
   {
     id: "cozucu",
     nav: "Çözücü",
-    mood: { cam: [40, 60, 1250], look: [60, 20, -40], water: -20, rain: 0, buried: 0.35, contour: 1, ember: 0 },
+    mood: { ...riverShot(500, { dx: 0, dy: -60, dz: 1100 }), depth: 9, rain: 0, buried: 0.3, contour: 1, ember: 0.2 },
     body: () => (
       <>
         <Eyebrow n="06">Fizik</Eyebrow>
@@ -260,7 +260,7 @@ const SLIDES: Slide[] = [
   {
     id: "kullanici",
     nav: "Kim kullanır",
-    mood: { cam: [-1150, 250, 700], look: [200, -60, -20], water: -26, rain: 0, buried: 0.6, contour: 0.6, ember: 0 },
+    mood: { ...riverShot(800, { dx: 380, dy: 320, dz: 300 }), depth: 8, rain: 0.2, buried: 0.3, contour: 0.6, ember: 0.3 },
     body: () => (
       <>
         <Eyebrow n="07">Kim kullanır</Eyebrow>
@@ -283,7 +283,7 @@ const SLIDES: Slide[] = [
   {
     id: "demo",
     nav: "Demo",
-    mood: { cam: [-300, -300, 180], look: [260, 120, -10], water: 4, rain: 0.6, buried: 0.3, contour: 0.4, ember: 0.5 },
+    mood: { ...riverShot(620, { dx: -160, dy: -120, dz: 45, lookZ: 6 }), depth: 13, rain: 0.8, buried: 0.2, contour: 0.4, ember: 1 },
     body: () => (
       <>
         <Eyebrow n="08">Canlı</Eyebrow>
@@ -298,7 +298,7 @@ const SLIDES: Slide[] = [
   {
     id: "ekip",
     nav: "Ekip",
-    mood: { cam: [-1000, -1000, 900], look: [0, 0, -40], water: -32, rain: 0, buried: 0.7, contour: 0.7, ember: 0 },
+    mood: { ...riverShot(300, { dx: -900, dy: -1100, dz: 950 }), depth: 2.5, rain: 0, buried: 0.7, contour: 0.7, ember: 0 },
     body: () => (
       <>
         <Eyebrow n="09">Takım SALU</Eyebrow>
