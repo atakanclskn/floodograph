@@ -14,17 +14,17 @@ export interface City {
   resM: number;
 }
 
-/** Grid metadata needed to decode binary frames (stored in scenarios.params.grid). */
+/** Grid metadata for binary frames (scenarios.params.grid, written by pipeline/floodograph/pipeline/simulate.py).
+ * The grid is regular in UTM (epsg); corners are its WGS84 projection. Over a few km the UTM->WGS84 mapping is
+ * affine to sub-metre accuracy, so a cell centre can be placed by bilinear interpolation of the 4 corners. */
 export interface GridMeta {
-  /** Top-left corner in WGS84 */
-  originLon: number;
-  originLat: number;
-  /** Cell size in degrees (lon, lat) after reprojection to 4326 */
-  dLon: number;
-  dLat: number;
   nx: number;
   ny: number;
-  /** uint16 value -> metres (depth) and m/s (u, v) */
+  res_m: number;
+  epsg: number;
+  /** [lon, lat] of the grid corners in order NW, NE, SE, SW. Row 0 is the northern edge. */
+  corners_lonlat: [[number, number], [number, number], [number, number], [number, number]];
+  /** uint16/int16 value -> metres (depth) and m/s (u east, v north) */
   depthScale: number;
   velocityScale: number;
 }

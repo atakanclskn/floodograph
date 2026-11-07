@@ -23,7 +23,8 @@ export interface FloodRepository {
   corridors(cityId: string): Promise<FeatureCollection>;
   waterBands(scenarioId: string, tFrom: number, tTo: number): Promise<FeatureCollection>;
   gridFrames(scenarioId: string): Promise<GridFrameRef[]>;
-  loadGridFrame(ref: GridFrameRef): Promise<GridFrame>;
+  /** Binary depth/velocity frame (see frames.ts) at minute tMin of a scenario. */
+  loadGridFrame(scenarioId: string, tMin: number): Promise<GridFrame>;
   summary(scenarioId: string): Promise<ScenarioSummary>;
 }
 
@@ -31,7 +32,8 @@ export interface FloodRepository {
 export class SupabaseFloodRepository implements FloodRepository {
   constructor(
     private readonly db: SupabaseClient,
-    private readonly framesBucket = "frames",
+    /** Needed for raw-binary RPC calls (PostgREST returns bytea as octet-stream). */
+    private readonly rest: { url: string; key: string },
   ) {}
 
   async listCities(): Promise<City[]> {
@@ -102,10 +104,18 @@ export class SupabaseFloodRepository implements FloodRepository {
     return data as GridFrameRef[];
   }
 
-  async loadGridFrame(ref: GridFrameRef): Promise<GridFrame> {
-    const { data } = this.db.storage.from(this.framesBucket).getPublicUrl(ref.path);
-    const res = await fetch(data.publicUrl);
-    if (!res.ok) throw new Error(`frame ${ref.path}: HTTP ${res.status}`);
+  async loadGridFrame(scenarioId: string, tMin: number): Promise<GridFrame> {
+    // Frames live in Postgres (bytea); ask PostgREST for the raw bytes instead of hex-encoded JSON.
+    const res = await fetch(`${this.rest.url}/rest/v1/rpc/get_grid_frame`, {
+      method: "POST",
+      headers: {
+        apikey: this.rest.key,
+        "Content-Type": "application/json",
+        Accept: "application/octet-stream",
+      },
+      body: JSON.stringify({ p_scenario: scenarioId, p_t: tMin }),
+    });
+    if (!res.ok) throw new Error(`frame ${scenarioId}@${tMin}: HTTP ${res.status}`);
     return decodeFrame(new Uint8Array(await res.arrayBuffer()));
   }
 

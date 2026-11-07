@@ -10,6 +10,6 @@ let instance: FloodRepository | null = null;
 export function floodRepository(): FloodRepository {
   if (instance) return instance;
   if (!url || !key) throw new Error("Supabase env missing: NEXT_PUBLIC_SUPABASE_URL / NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY");
-  instance = new SupabaseFloodRepository(createClient(url, key, { auth: { persistSession: false } }));
+  instance = new SupabaseFloodRepository(createClient(url, key, { auth: { persistSession: false } }), { url, key });
   return instance;
 }
