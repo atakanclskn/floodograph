@@ -1,0 +1,23 @@
+# Pilot areas. bbox = [west, south, east, north] in WGS84.
+# hydro_buffer_km: extra DEM margin so upstream catchments outside the AOI still drain into it.
+istanbul:
+  name: İstanbul · Sarıyer-Ayazağa
+  epsg: 32635
+  bbox: [28.985, 41.080, 29.050, 41.130]
+  rain_point: [41.11, 29.01]
+  hydro_buffer_km: 4
+  res_m: 10
+izmir:
+  name: İzmir · Bornova
+  epsg: 32635
+  bbox: [27.195, 38.445, 27.260, 38.495]
+  rain_point: [38.47, 27.22]
+  hydro_buffer_km: 4
+  res_m: 10
+ankara:
+  name: Ankara · Mamak
+  epsg: 32636
+  bbox: [32.880, 39.905, 32.945, 39.955]
+  rain_point: [39.93, 32.91]
+  hydro_buffer_km: 4
+  res_m: 10

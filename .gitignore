@@ -30,3 +30,8 @@ Thumbs.db
 .next/
 next-env.d.ts
 *.tsbuildinfo
+
+# Pipeline
+pipeline/.venv/
+pipeline/data/
+pipeline/.env
