@@ -1,6 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { ViewTransition } from "react";
+import { CountUp } from "@/components/count-up";
 
 const SLIDE = { "nav-forward": "nav-forward", "nav-back": "nav-back", default: "none" } as const;
 
@@ -22,10 +23,12 @@ function DemoLink({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
     <Link
       href="/demo"
       transitionTypes={["nav-forward"]}
-      className={`btn-ember inline-flex items-center gap-2.5 bg-ember font-semibold text-ink ${cls}`}
+      className={`btn-ember group inline-flex items-center gap-2.5 bg-ember font-semibold text-ink ${cls}`}
     >
       Demoyu aç
-      <Arrow />
+      <span className="transition-transform duration-200 ease-out group-hover:translate-x-0.5">
+        <Arrow />
+      </span>
     </Link>
   );
 }
@@ -83,13 +86,12 @@ const CORRIDORS = [
 
 const TEAM = ["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"];
 
-const fmt = (n: number) => n.toLocaleString("tr-TR");
 
 export default function Home() {
   return (
     <ViewTransition enter={SLIDE} exit={SLIDE} default="none">
       <div className="w-full overflow-x-clip">
-        <header className="sticky top-0 z-20 px-4 pt-4 sm:px-8 lg:px-12" style={{ viewTransitionName: "site-header" }}>
+        <header className="sticky top-0 z-20 px-4 pt-4 sm:px-8 lg:px-12">
           <nav aria-label="Ana gezinme" className="glass mx-auto flex max-w-[1280px] items-center justify-between gap-3 rounded-[18px] py-1.5 pl-3 pr-1.5 sm:pl-4">
             <a href="#top" className="flex items-center gap-2.5">
               <Image src="/icon.png" alt="" width={28} height={28} priority />
@@ -138,7 +140,7 @@ export default function Home() {
               />
             </svg>
             <div className="relative mx-auto grid max-w-[1280px] items-end gap-12 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-              <div className="flex max-w-[760px] flex-col gap-7">
+              <div className="hero-rise flex max-w-[760px] flex-col gap-7">
                 <p className="font-mono text-[13px] uppercase tracking-[0.08em] text-ember-2">14.10.2026 · İstanbul · Sarıyer–Ayazağa</p>
                 <h1 className="font-display text-[clamp(44px,7.2vw,104px)] font-bold leading-[0.95] tracking-[-0.035em] text-balance">
                   Su yolunu her zaman bulur. <span className="text-ember">Biz önce buluruz.</span>
@@ -153,14 +155,15 @@ export default function Home() {
                   </a>
                 </div>
               </div>
-              <div className="glass flex w-full max-w-[340px] gap-5 rounded-3xl p-6 lg:justify-self-end">
+              <div className="hero-rise glass flex w-full max-w-[340px] gap-5 rounded-3xl p-6 lg:justify-self-end" style={{ animationDelay: "240ms" }}>
                 <div aria-hidden="true" className="flex w-3.5 flex-col justify-end overflow-hidden rounded-lg bg-water/12">
-                  <div className="h-[92%] rounded-lg bg-water" />
+                  <div className="gauge-fill h-[92%] rounded-lg bg-water" />
                 </div>
                 <div className="flex flex-col gap-3.5">
                   <p className="font-mono text-xs uppercase tracking-[0.08em] text-fg-3">Günlük yağış</p>
                   <p className="font-mono text-[64px] font-medium leading-none tracking-[-0.04em]">
-                    242<span className="text-[22px] text-fg-3"> mm</span>
+                    <CountUp value={242} />
+                    <span className="text-[22px] text-fg-3"> mm</span>
                   </p>
                   <p className="text-sm leading-normal text-fg-2">Raporlarda 242 mm&apos;ye kadar. İBB&apos;ye göre 1985&apos;ten beri en yoğun gün.</p>
                 </div>
@@ -261,11 +264,13 @@ export default function Home() {
               <div className="grid items-start gap-12 lg:grid-cols-2">
                 <div className="flex flex-col gap-10">
                   <div className="reveal flex flex-col gap-4">
-                    <p className="font-mono text-[clamp(56px,7vw,96px)] font-medium leading-none tracking-[-0.05em]">{fmt(TOTAL)}</p>
+                    <p className="font-mono text-[clamp(56px,7vw,96px)] font-medium leading-none tracking-[-0.05em]">
+                      <CountUp value={TOTAL} />
+                    </p>
                     <p className="text-base text-fg-2">bina tek tek analiz edildi</p>
                     <div aria-hidden="true" className="flex h-3 gap-0.5 overflow-hidden rounded-md bg-[var(--tier-izle)]">
                       {TIERS.map((t) => (
-                        <div key={t.label} style={{ width: `${(t.n / TOTAL) * 100}%`, background: t.color }} />
+                        <div key={t.label} className="bar-grow" style={{ width: `${(t.n / TOTAL) * 100}%`, background: t.color }} />
                       ))}
                     </div>
                     <dl className="grid grid-cols-3 gap-4">
@@ -275,7 +280,9 @@ export default function Home() {
                             <span className="size-2 rounded-[2px]" style={{ background: t.color }} />
                             {t.label}
                           </dt>
-                          <dd className="font-mono text-[28px]">{fmt(t.n)}</dd>
+                          <dd className="font-mono text-[28px]">
+                            <CountUp value={t.n} />
+                          </dd>
                         </div>
                       ))}
                     </dl>
@@ -284,7 +291,7 @@ export default function Home() {
                     {CORRIDORS.map((c) => (
                       <div key={c.label} className="grid grid-cols-[minmax(0,1fr)_auto_auto] items-baseline gap-4 border-b border-line py-[18px]">
                         <span className={`text-[15px] ${c.hot ? "font-semibold text-fg" : "text-fg-2"}`}>{c.label}</span>
-                        <span className={`font-mono text-[22px] ${c.hot ? "text-ember" : ""}`}>{c.n}</span>
+                        <CountUp value={c.n} className={`font-mono text-[22px] ${c.hot ? "text-ember" : ""}`} />
                         <span className={`min-w-16 text-right font-mono text-sm ${c.hot ? "text-ember-2" : "text-fg-3"}`}>{c.km}</span>
                       </div>
                     ))}

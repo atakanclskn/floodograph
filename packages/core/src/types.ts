@@ -62,6 +62,16 @@ export interface BuildingProps {
   tier: Tier;
 }
 
+/** Properties carried by each corridor feature (repository.corridors). */
+export interface CorridorProps {
+  id: number;
+  kind: "buried_osm" | "derived" | "open";
+  tier: Tier;
+  upstreamKm2: number;
+  buildingsAtRisk: number;
+  criticalCount: number;
+}
+
 export interface WaterBandProps {
   t: number;
   band: number;

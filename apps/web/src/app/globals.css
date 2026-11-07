@@ -123,3 +123,83 @@ body {
     animation-delay: 0s !important;
   }
 }
+
+/* Liquid Glass refraction: Chromium only (flag set by ClientRoot), plain blur elsewhere. */
+html[data-refract] .glass {
+  backdrop-filter: url(#fg-refract) blur(18px) saturate(160%);
+}
+
+/* Hero entrance: CSS so it runs before hydration and never hides LCP text for long. */
+.hero-rise {
+  animation: hero-rise 600ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+@keyframes hero-rise {
+  from {
+    opacity: 0;
+    translate: 0 14px;
+    filter: blur(4px);
+  }
+}
+.gauge-fill {
+  transform-origin: bottom;
+  animation: gauge 1100ms cubic-bezier(0.16, 1, 0.3, 1) 300ms both;
+}
+@keyframes gauge {
+  from {
+    transform: scaleY(0);
+  }
+}
+@supports (animation-timeline: view()) {
+  .bar-grow {
+    transform-origin: left;
+    animation: bar-grow 1ms linear both;
+    animation-timeline: view();
+    animation-range: entry 10% cover 35%;
+  }
+}
+@keyframes bar-grow {
+  from {
+    transform: scaleX(0);
+  }
+}
+
+/* MapLibre controls in the house style */
+.maplibregl-ctrl-group {
+  background: rgb(17 24 28 / 0.7) !important;
+  border: 1px solid var(--line);
+  border-radius: 12px !important;
+  box-shadow: none !important;
+  backdrop-filter: blur(14px);
+}
+.maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--line) !important;
+}
+.maplibregl-ctrl-group button .maplibregl-ctrl-icon {
+  filter: invert(1) brightness(0.85);
+}
+.maplibregl-ctrl-attrib {
+  background: rgb(10 15 18 / 0.75) !important;
+  color: var(--fg-3);
+  font-size: 11px;
+  border-radius: 10px !important;
+}
+.maplibregl-ctrl-attrib a {
+  color: var(--fg-2) !important;
+}
+.maplibregl-ctrl-attrib-button {
+  filter: invert(1);
+}
+@media (max-width: 639px) {
+  /* bottom sheet covers the corner: lift attribution above it */
+  .maplibregl-ctrl-bottom-right {
+    bottom: 152px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise,
+  .gauge-fill,
+  .bar-grow {
+    animation: none;
+  }
+}

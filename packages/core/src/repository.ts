@@ -2,6 +2,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { decodeFrame } from "./frames";
 import type {
   City,
+  CorridorProps,
   GridFrame,
   GridFrameRef,
   RainPoint,
@@ -16,7 +17,10 @@ export interface FloodRepository {
   listCities(): Promise<City[]>;
   listScenarios(cityId: string): Promise<Scenario[]>;
   rainSeries(scenarioId: string): Promise<RainPoint[]>;
-  buildings(cityId: string, scenarioId: string): Promise<FeatureCollection>;
+  /** Buildings with tier; scenarioId null = static HAND-based tier (no simulation impacts). */
+  buildings(cityId: string, scenarioId: string | null): Promise<FeatureCollection>;
+  /** Flow corridors (buried in OSM, open, or derived = on no map) as LineString features. */
+  corridors(cityId: string): Promise<FeatureCollection>;
   waterBands(scenarioId: string, tFrom: number, tTo: number): Promise<FeatureCollection>;
   gridFrames(scenarioId: string): Promise<GridFrameRef[]>;
   loadGridFrame(ref: GridFrameRef): Promise<GridFrame>;
@@ -52,10 +56,34 @@ export class SupabaseFloodRepository implements FloodRepository {
     return (data ?? []).map((r) => ({ tMin: r.t_min as number, mm: r.mm as number }));
   }
 
-  async buildings(cityId: string, scenarioId: string): Promise<FeatureCollection> {
+  async buildings(cityId: string, scenarioId: string | null): Promise<FeatureCollection> {
     const { data, error } = await this.db.rpc("get_buildings", { p_city: cityId, p_scenario: scenarioId });
     if (error) throw error;
     return data as FeatureCollection;
+  }
+
+  async corridors(cityId: string): Promise<FeatureCollection> {
+    const { data, error } = await this.db
+      .from("corridors")
+      .select("id, kind, tier, upstream_km2, buildings_at_risk, critical_count, geom")
+      .eq("city_id", cityId);
+    if (error) throw error;
+    return {
+      type: "FeatureCollection",
+      features: (data ?? []).map((r) => ({
+        type: "Feature",
+        id: r.id as number,
+        geometry: r.geom,
+        properties: {
+          id: r.id,
+          kind: r.kind,
+          tier: r.tier,
+          upstreamKm2: r.upstream_km2,
+          buildingsAtRisk: r.buildings_at_risk,
+          criticalCount: r.critical_count,
+        } satisfies CorridorProps,
+      })),
+    };
   }
 
   async waterBands(scenarioId: string, tFrom: number, tTo: number): Promise<FeatureCollection> {
