@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 from shapely.geometry import shape
 
-from ..adapters import osm
+from ..adapters import osm, overture
 from ..adapters.dem import CopernicusSource, FabdemSource, load_dem
 from ..cache import cached
 from ..config import CityConfig
@@ -38,6 +38,14 @@ def osm_layers(city: CityConfig):
     }
 
 
+@cached("footprints")
+def building_footprints(city: CityConfig) -> gpd.GeoDataFrame:
+    """Overture buildings (OSM + ML footprints), keeping OSM height/levels tags where OSM has the building."""
+    osm_b = osm_layers(city)["buildings"]
+    heights = osm_b.drop_duplicates("osm_id").set_index("osm_id")["height_m"]
+    return overture.buildings(city.bbox, city.data_dir / "cache", heights)
+
+
 def _aoi(city: CityConfig) -> gpd.GeoSeries:
     from shapely.geometry import box
 
@@ -48,7 +56,7 @@ def buildings(city: CityConfig) -> gpd.GeoDataFrame:
     """Buildings with HAND (lowest point of the footprint), critical facility tag and urgency tier."""
     h, _ = hydro(city)
     layers = osm_layers(city)
-    b = layers["buildings"].to_crs(city.epsg).copy()
+    b = building_footprints(city).to_crs(city.epsg).copy()
 
     # HAND of a building = minimum over its footprint vertices and centroid (water reaches the lowest wall first)
     pts = b.geometry.apply(lambda g: np.vstack([np.asarray(g.centroid.coords),

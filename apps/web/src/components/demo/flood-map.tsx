@@ -4,7 +4,6 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import { useEffect, useRef, useState } from "react";
 import type {
   Map as MlMap,
-  CanvasSource,
   ExpressionSpecification,
   GeoJSONSource,
   GeoJSONSourceSpecification,
@@ -14,7 +13,8 @@ import { floodRepository } from "@/lib/repository";
 import { CORRIDOR_STYLE, TIER_COLOR, TIER_ORDER, type CorridorKind } from "@/lib/tier-style";
 import { usePlayback, type DemoMode } from "@/lib/playback-store";
 import { AREA_THRESHOLD_M, SCENARIO_ID, countAtMost } from "@/lib/scenario";
-import { WaterPainter, type FrameStore } from "@/lib/water-frames";
+import type { FrameStore } from "@/lib/water-frames";
+import { Water3DLayer } from "./water-3d";
 import { buildBaseStyle, CONTOUR_LAYERS } from "./map-style";
 
 type GeoData = GeoJSONSourceSpecification["data"];
@@ -285,28 +285,19 @@ export function FloodMap(props: FloodMapProps) {
     };
   }, [mapReady, scenarioReady, dataVersion]);
 
-  // Water: canvas source pinned to the simulation grid corners, painted from the frame store.
+  // Water: the /sinema 3D surface (waves along the modelled flow, foam, reflections) as a custom layer.
   const grid = scenario?.grid ?? null;
   const frames = scenario?.frames ?? null;
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || !grid || !frames) return;
-    const painter = new WaterPainter(grid);
-    // a previous run of this effect (dev double-invoke, fast refresh) may have left them behind
+    // a previous run of this effect (dev double-invoke, fast refresh) may have left it behind
     if (map.getLayer("water")) map.removeLayer("water");
-    if (map.getSource("water")) map.removeSource("water");
-    map.addSource("water", { type: "canvas", canvas: painter.canvas, animate: false, coordinates: grid.corners_lonlat });
-    map.addLayer(
-      {
-        id: "water",
-        type: "raster",
-        source: "water",
-        layout: { visibility: usePlayback.getState().mode === "scenario" ? "visible" : "none" },
-        paint: { "raster-opacity": 0.92, "raster-resampling": "linear", "raster-fade-duration": 0 },
-      },
-      "corridor-glow",
-    );
-    const source = map.getSource("water") as CanvasSource;
+    const lowPower = window.matchMedia("(pointer: coarse)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
+    const water = new Water3DLayer(grid, "water", lowPower);
+    map.addLayer(water, "corridor-glow");
+    map.setLayoutProperty("water", "visibility", usePlayback.getState().mode === "scenario" ? "visible" : "none");
+    const cellHa = (grid.res_m * grid.res_m) / 10_000;
 
     let raf = 0;
     let drawnKey = "";
@@ -332,11 +323,12 @@ export function FloodMap(props: FloodMapProps) {
       const key = `${a.tMin}|${b.tMin}|${alpha.toFixed(3)}`;
       if (key === drawnKey) return;
       drawnKey = key;
-      const ha = painter.paint(a, b, alpha, AREA_THRESHOLD_M);
-      usePlayback.getState().setLiveHa(ha);
-      // copy the canvas into the GL texture once (play() then pause() uploads a single frame)
-      source.play();
-      source.pause();
+      water.setFrames(a, b, alpha);
+      let wet = 0;
+      const da = a.depth;
+      const db = b.depth;
+      for (let i = 0, n = da.length; i < n; i++) if (da[i]! * (1 - alpha) + db[i]! * alpha > AREA_THRESHOLD_M) wet++;
+      usePlayback.getState().setLiveHa(wet * cellHa);
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(draw);
@@ -357,7 +349,6 @@ export function FloodMap(props: FloodMapProps) {
       unsubT();
       unsubLoad();
       if (map.getLayer("water")) map.removeLayer("water");
-      if (map.getSource("water")) map.removeSource("water");
     };
   }, [mapReady, grid, frames]);
 

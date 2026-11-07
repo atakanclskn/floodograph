@@ -1,0 +1,65 @@
+"""Overture Maps buildings: OpenStreetMap footprints plus Microsoft / Google ML footprints, ODbL.
+
+In much of Türkiye OSM misses whole neighbourhoods (in the Sarıyer pilot ~30 % of buildings); Overture's
+conflated layer fills them from satellite-derived footprints. OSM-sourced records keep their OSM id (ways
+positive, relations negative, as in osm.py); ML footprints get synthetic ids from ML_ID_BASE up.
+© OpenStreetMap contributors, © Microsoft, Overture Maps Foundation — ODbL.
+"""
+from __future__ import annotations
+
+import subprocess
+import sys
+from pathlib import Path
+
+import geopandas as gpd
+import numpy as np
+import pandas as pd
+
+FLOOR_HEIGHT_M = 3.0
+DEFAULT_HEIGHT_M = 9.0
+ML_ID_BASE = 9_000_000_000_000  # far above any OSM id
+
+
+def _download(bbox, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    w, s, e, n = bbox
+    exe = Path(sys.executable).with_name("overturemaps.exe" if sys.platform == "win32" else "overturemaps")
+    subprocess.run([str(exe), "download", f"--bbox={w},{s},{e},{n}", "-f", "geoparquet", "--type=building",
+                    "-o", str(path)], check=True)
+
+
+def _osm_id(rec: str | None) -> float:
+    """OSM record ids look like "w123456789@4" (way) or "r42@1" (relation)."""
+    if not rec:
+        return np.nan
+    num = rec.partition("@")[0][1:]
+    if not num.isdigit():
+        return np.nan
+    return float(num) if rec[0] == "w" else -float(num) if rec[0] == "r" else np.nan
+
+
+def buildings(bbox, cache_dir: Path, osm_heights: pd.Series | None = None) -> gpd.GeoDataFrame:
+    """Footprints with an estimated height (m) and their source. WGS84.
+
+    osm_heights: optional height_m indexed by osm_id (from osm.buildings) to keep OSM's levels/height tags.
+    """
+    path = cache_dir / "overture_buildings.parquet"
+    if not path.exists():
+        _download(bbox, path)
+    g = gpd.read_parquet(path)
+    g = g[g.geometry.geom_type.isin(["Polygon", "MultiPolygon"])].copy()
+    first = g["sources"].apply(lambda s: s[0] if s is not None and len(s) else {})
+    g["source"] = first.apply(lambda d: d.get("dataset") or "?")
+    g["osm_id"] = first.apply(lambda d: _osm_id(d.get("record_id")) if d.get("dataset") == "OpenStreetMap" else np.nan)
+    ml = g["osm_id"].isna().to_numpy()
+    g.loc[ml, "osm_id"] = ML_ID_BASE + np.arange(int(ml.sum()))
+    g = g.drop_duplicates("osm_id")
+
+    height = pd.to_numeric(g["height"], errors="coerce")
+    floors = pd.to_numeric(g["num_floors"], errors="coerce")
+    est = height.fillna(floors * FLOOR_HEIGHT_M)
+    if osm_heights is not None:
+        est = est.fillna(g["osm_id"].map(osm_heights))
+    g["height_m"] = est.fillna(DEFAULT_HEIGHT_M).clip(3, 250)
+    g["osm_id"] = g["osm_id"].astype("int64")
+    return g[["osm_id", "height_m", "source", "geometry"]].set_crs(4326, allow_override=True).reset_index(drop=True)

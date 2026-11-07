@@ -1,8 +1,8 @@
 import { lerpFrames, type FloodRepository, type GridFrame, type GridFrameRef, type GridMeta } from "@floodograph/core";
 
 const NO_VEC = new Float32Array(0);
-/** Decoded frames keep depth only; velocity is not drawn yet and would triple memory. */
-const MEMORY_BUDGET_BYTES = 48 * 1024 * 1024;
+/** Decoded frames keep depth and velocity (the 3D water flows along it): 12 bytes per cell. */
+const MEMORY_BUDGET_BYTES = 64 * 1024 * 1024;
 const MAX_CONCURRENT = 4;
 
 /**
@@ -31,7 +31,7 @@ export class FrameStore {
     this.times = refs.map((r) => r.tMin).sort((a, b) => a - b);
     for (const r of refs) if (r.maxDepth != null && r.maxDepth <= 0) this.dry.add(r.tMin);
     const n = grid.nx * grid.ny;
-    this.capacity = Math.max(24, Math.floor(MEMORY_BUDGET_BYTES / (n * 4)));
+    this.capacity = Math.max(24, Math.floor(MEMORY_BUDGET_BYTES / (n * 12)));
     this.empty = { tMin: 0, nx: grid.nx, ny: grid.ny, depth: new Float32Array(n), u: NO_VEC, v: NO_VEC };
   }
 
@@ -115,7 +115,7 @@ export class FrameStore {
         .loadGridFrame(this.scenarioId, tMin)
         .then((f) => {
           if (this.disposed) return;
-          this.cache.set(tMin, { ...f, u: NO_VEC, v: NO_VEC });
+          this.cache.set(tMin, f);
           while (this.cache.size > this.capacity) this.cache.delete(this.cache.keys().next().value!);
           for (const fn of this.listeners) fn(tMin);
         })
@@ -133,12 +133,12 @@ export class FrameStore {
 /** Depth colour ramp: transparent -> light blue -> deep blue. Indexed on sqrt(depth) for detail in the shallows. */
 const LUT_MAX_M = 4;
 const STOPS: [depth: number, r: number, g: number, b: number, a: number][] = [
-  [0.02, 150, 210, 240, 0],
-  [0.06, 168, 222, 247, 0.42],
-  [0.15, 122, 198, 236, 0.66],
-  [0.5, 62, 145, 200, 0.76],
-  [1.5, 31, 94, 152, 0.88],
-  [LUT_MAX_M, 14, 52, 96, 0.94],
+  [0.02, 150, 118, 80, 0],
+  [0.06, 168, 132, 88, 0.6],
+  [0.15, 128, 98, 64, 0.8],
+  [0.5, 86, 64, 40, 0.9],
+  [1.5, 46, 34, 22, 0.95],
+  [LUT_MAX_M, 20, 15, 10, 0.97],
 ];
 
 function buildLut(): Uint8ClampedArray {
