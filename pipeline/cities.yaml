@@ -3,8 +3,9 @@
 istanbul:
   name: İstanbul · Sarıyer-Ayazağa
   epsg: 32635
-  bbox: [28.985, 41.080, 29.050, 41.130]
-  rain_point: [41.11, 29.01]
+  # centred on Ayazağa: covers Kemerburgaz Cd. (W), Ayazağa Meydanı/Deresi and Hacıosman (N) from the 14 Oct reports
+  bbox: [28.965, 41.090, 29.040, 41.145]
+  rain_point: [41.115, 29.000]
   hydro_buffer_km: 4
   res_m: 10
 izmir:

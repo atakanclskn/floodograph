@@ -172,7 +172,7 @@ def run_scenario(city: CityConfig, scenario_id: str, rain: RainSeries, res_m: fl
                     output_every=output_every_s, culvert_events=events)
 
     stored = float(st.h.sum() * d.dx**2)
-    err = (bal["rain_m3"] - bal["loss_m3"] - bal["sea_m3"] - stored) / max(bal["rain_m3"], 1.0)
+    err = (bal["rain_m3"] - bal["loss_m3"] - bal["sea_m3"] - bal["boundary_out_m3"] - stored) / max(bal["rain_m3"], 1.0)
 
     impacts = sd.buildings[["osm_id"]].copy()
     impacts["first_wet_min"] = first_wet

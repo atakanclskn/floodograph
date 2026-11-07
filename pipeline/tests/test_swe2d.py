@@ -78,3 +78,19 @@ def test_dam_break_matches_ritter_solution():
     exact_front = x0 + (2 * c0 - math.sqrt(9 * 9.81 * 1e-3)) * t_end
     # first-order schemes smear the thin dry-bed tip; 15 % on the front, 5 % L1 on the whole profile
     assert abs(front - exact_front) / (exact_front - x0) < 0.15
+
+
+def test_open_boundaries_conserve_mass_and_never_inject_water():
+    """Rain on a tilted open plane with losses: rain = stored + losses + boundary outflow, and the
+    outflow-only edges must never act as a source (a sloping-inward edge would otherwise suck water in)."""
+    ny, nx = 25, 40
+    y, x = np.mgrid[0:ny, 0:nx]
+    z = 0.02 * x + 0.3 * np.sin(y / 4.0)  # slopes up to the east: west edge drains, east edge points inward
+    d = make_domain(z, dx=5.0, n=0.035, loss=5e-3 / 3600)
+    st = initial_state(d)
+    bal = run(d, st, rain_at=lambda t: 40e-3 / 3600 if t < 1200 else 0.0, t_end=2400.0)
+    stored = st.h.sum() * d.dx**2
+    err = (bal["rain_m3"] - bal["loss_m3"] - bal["boundary_out_m3"] - stored) / bal["rain_m3"]
+    assert abs(err) < 1e-3, f"mass error {err:.2e}"
+    assert bal["boundary_out_m3"] > 0
+    assert bal["boundary_out_m3"] <= bal["rain_m3"]

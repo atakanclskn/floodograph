@@ -86,6 +86,12 @@ def _fluxes_x(h, hu, hv, z, wall, fx):
             ul = _vel(hl, hu[j, il]); vl = _vel(hl, hv[j, il])
             ur = _vel(hr, hu[j, ir]); vr = _vel(hr, hv[j, ir])
             f0, f1, f2 = _hll(hls, ul, vl, hrs, ur, vr)
+            if (i == 0 and f0 > 0.0) or (i == nx and f0 < 0.0):
+                # domain edge, flow pointing inward: close it (outflow-only boundary, no mass source)
+                pb = 0.5 * G * hl * hl
+                fx[j, i, 0] = 0.0; fx[j, i, 1] = pb; fx[j, i, 2] = 0.0
+                fx[j, i, 3] = 0.0; fx[j, i, 4] = pb; fx[j, i, 5] = 0.0
+                continue
             fx[j, i, 0] = f0; fx[j, i, 1] = f1 + 0.5 * G * (hl * hl - hls * hls); fx[j, i, 2] = f2
             fx[j, i, 3] = f0; fx[j, i, 4] = f1 + 0.5 * G * (hr * hr - hrs * hrs); fx[j, i, 5] = f2
 
@@ -112,6 +118,11 @@ def _fluxes_y(h, hu, hv, z, wall, gy):
             vl = _vel(hl, hv[jl, i]); ul = _vel(hl, hu[jl, i])
             vr = _vel(hr, hv[jr, i]); ur = _vel(hr, hu[jr, i])
             f0, f1, f2 = _hll(hls, vl, ul, hrs, vr, ur)
+            if (j == 0 and f0 > 0.0) or (j == ny and f0 < 0.0):
+                pb = 0.5 * G * hl * hl
+                gy[j, i, 0] = 0.0; gy[j, i, 1] = pb; gy[j, i, 2] = 0.0
+                gy[j, i, 3] = 0.0; gy[j, i, 4] = pb; gy[j, i, 5] = 0.0
+                continue
             gy[j, i, 0] = f0; gy[j, i, 1] = f1 + 0.5 * G * (hl * hl - hls * hls); gy[j, i, 2] = f2
             gy[j, i, 3] = f0; gy[j, i, 4] = f1 + 0.5 * G * (hr * hr - hrs * hrs); gy[j, i, 5] = f2
 
@@ -238,7 +249,7 @@ def run(d: Domain, st: State, rain_at, t_end: float, cfl: float = 0.45, dt_max: 
     area = d.dx * d.dx
     sat = np.zeros(d.culvert_qcap.shape[0], dtype=np.bool_)
     first_sat = np.full(d.culvert_qcap.shape[0], np.nan)
-    bal = {"rain_m3": 0.0, "loss_m3": 0.0, "sea_m3": 0.0, "culvert_moved_m3": 0.0, "steps": 0}
+    bal = {"rain_m3": 0.0, "loss_m3": 0.0, "sea_m3": 0.0, "boundary_out_m3": 0.0, "culvert_moved_m3": 0.0, "steps": 0}
     next_out = st.t + output_every
     if on_output is not None and st.t == 0.0:
         on_output(st, {"t": st.t, **bal})
@@ -253,6 +264,8 @@ def run(d: Domain, st: State, rain_at, t_end: float, cfl: float = 0.45, dt_max: 
         before_loss = loss[~d.wall].sum() * dt * area
         _fluxes_x(st.h, st.hu, st.hv, zz, d.wall, fx)
         _fluxes_y(st.h, st.hu, st.hv, zz, d.wall, gy)
+        bal["boundary_out_m3"] += dt * d.dx * float(
+            fx[:, nx, 0].sum() - fx[:, 0, 0].sum() + gy[ny, :, 0].sum() - gy[0, :, 0].sum())
         bal["sea_m3"] += _update(st.h, st.hu, st.hv, fx, gy, d.wall, d.sea, n2, rain, loss, dt, d.dx)
         bal["rain_m3"] += float(rain[~d.wall].sum()) * dt * area
         bal["loss_m3"] += before_loss
