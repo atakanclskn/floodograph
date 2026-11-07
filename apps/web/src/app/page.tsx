@@ -72,16 +72,16 @@ const STEPS = [
 ];
 
 const TIERS = [
-  { label: "Acil", n: 730, color: "var(--tier-acil)" },
-  { label: "Yüksek", n: 166, color: "var(--tier-yuksek)" },
-  { label: "Orta", n: 367, color: "var(--tier-orta)" },
+  { label: "Acil", n: 1337, color: "var(--tier-acil)" },
+  { label: "Yüksek", n: 227, color: "var(--tier-yuksek)" },
+  { label: "Orta", n: 501, color: "var(--tier-orta)" },
 ];
-const TOTAL = 19763;
+const TOTAL = 16787;
 
 const CORRIDORS = [
-  { label: "Açık dere", n: 12, km: "9,1 km" },
-  { label: "OSM'de kayıtlı gömülü dere", n: 7, km: "5,9 km" },
-  { label: "Hiçbir haritada olmayan koridor", n: 53, km: "26,8 km", hot: true },
+  { label: "Açık dere", n: 22, km: "16,3 km" },
+  { label: "OSM'de kayıtlı gömülü dere", n: 4, km: "1,9 km" },
+  { label: "Hiçbir haritada olmayan koridor", n: 59, km: "32,5 km", hot: true },
 ];
 
 const TEAM = ["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"];
@@ -259,7 +259,7 @@ export default function Home() {
             <div className="mx-auto flex max-w-[1280px] flex-col gap-14">
               <div className="reveal flex max-w-[760px] flex-col gap-5">
                 <Eyebrow>04 — Sarıyer–Ayazağa pilotu</Eyebrow>
-                <H2>53 dere hiçbir haritada yok.</H2>
+                <H2>59 dere hiçbir haritada yok.</H2>
               </div>
               <div className="grid items-start gap-12 lg:grid-cols-2">
                 <div className="flex flex-col gap-10">
@@ -342,7 +342,7 @@ export default function Home() {
               </svg>
               <div className="relative flex max-w-[640px] flex-col gap-4">
                 <h2 className="font-display text-[clamp(36px,5vw,72px)] font-bold leading-[0.95] tracking-[-0.035em]">Ayazağa&apos;yı kendin gez.</h2>
-                <p className="text-[17px] leading-relaxed text-fg-2">İzohipsler, akış koridorları ve 19.763 binanın kademesi tek haritada.</p>
+                <p className="text-[17px] leading-relaxed text-fg-2">İzohipsler, akış koridorları ve 16.787 binanın kademesi tek haritada.</p>
               </div>
               <div className="relative">
                 <DemoLink size="lg" />
