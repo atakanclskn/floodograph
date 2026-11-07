@@ -463,6 +463,16 @@ export function DemoApp() {
           <Toggle pressed={tilted} onClick={() => setTilted((v) => !v)}>
             3B
           </Toggle>
+          <Link
+            href="/sinema"
+            transitionTypes={["nav-forward"]}
+            className="btn-ember ml-1 inline-flex min-h-11 items-center gap-2 rounded-xl bg-ember px-3.5 text-sm font-semibold text-ink active:scale-95"
+          >
+            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
+            </svg>
+            Sinema
+          </Link>
         </div>
       </div>
 

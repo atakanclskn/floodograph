@@ -33,6 +33,21 @@ function DemoLink({ size = "md" }: { size?: "sm" | "md" | "lg" }) {
   );
 }
 
+function SinemaLink() {
+  return (
+    <Link
+      href="/sinema"
+      transitionTypes={["nav-forward"]}
+      className="inline-flex min-h-13 items-center gap-2.5 rounded-2xl border border-line px-5 text-base font-semibold transition-colors duration-150 hover:border-fg-3"
+    >
+      <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
+      </svg>
+      3B sinema
+    </Link>
+  );
+}
+
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return <p className="font-mono text-[13px] text-fg-3">{children}</p>;
 }
@@ -150,6 +165,7 @@ export default function Home() {
                 </p>
                 <div className="flex flex-wrap items-center gap-3">
                   <DemoLink />
+                  <SinemaLink />
                   <a href="#problem" className="inline-flex min-h-13 items-center rounded-2xl border border-line px-5 text-base transition-colors duration-150 hover:border-fg-3">
                     Ne oldu?
                   </a>

@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { AnimatePresence, animate, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
@@ -234,8 +235,18 @@ export function SceneApp() {
           initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="glass pointer-events-auto flex items-center gap-3 rounded-2xl py-2 pl-3 pr-4"
+          className="glass pointer-events-auto flex items-center gap-3 rounded-2xl py-2 pl-2 pr-4"
         >
+          <Link
+            href="/demo"
+            transitionTypes={["nav-back"]}
+            aria-label="Analiz haritasına dön"
+            className="inline-flex size-10 items-center justify-center rounded-xl transition-colors duration-150 hover:bg-white/10 active:scale-95"
+          >
+            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M13 8H3M7 4L3 8l4 4" />
+            </svg>
+          </Link>
           <span aria-hidden="true" className="relative flex size-7 items-center justify-center rounded-[9px] bg-ember/15 ring-1 ring-ember/35">
             <span className="size-2 rounded-full bg-ember shadow-[0_0_12px_2px_rgb(255_90_43/0.6)]" />
           </span>
