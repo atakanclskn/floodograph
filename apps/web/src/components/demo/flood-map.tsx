@@ -16,6 +16,7 @@ import { AREA_THRESHOLD_M, SCENARIO_ID, countAtMost } from "@/lib/scenario";
 import type { FrameStore } from "@/lib/water-frames";
 import { Water3DLayer } from "./water-3d";
 import { buildBaseStyle, CONTOUR_LAYERS } from "./map-style";
+import { hideOwnBuildings } from "@/components/scene/scene-style";
 
 type GeoData = GeoJSONSourceSpecification["data"];
 type Feature = { type: "Feature"; id?: number; geometry: unknown; properties: BuildingProps & { ht?: Tier } };
@@ -145,6 +146,7 @@ function applyData(map: MlMap, b: FC, c: { features: unknown[] }, onStats: (s: M
   }
   const fwSorted = Float64Array.from(fws).sort();
   (map.getSource("buildings") as GeoJSONSource).setData(b as GeoData);
+  hideOwnBuildings(map, b.features.map((f) => f.properties.id));
   (map.getSource("corridors") as GeoJSONSource).setData(c as GeoData);
   const corridors = { derived: 0, buried_osm: 0, open: 0 } as Record<CorridorKind, number>;
   for (const f of c.features as { properties: CorridorProps }[]) corridors[f.properties.kind]++;

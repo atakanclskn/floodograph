@@ -70,8 +70,12 @@ def cmd_upload_scenario(args: argparse.Namespace) -> None:
     rain = HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
                           station_note=args.station_note).series(*city.rain_point)
     imp = pd.read_csv(out / "impacts.csv")
-    b = steps.buildings(city)[["osm_id", "hand_m", "critical"]]
+    b = steps.buildings(city)[["osm_id", "hand_m", "critical", "grp"]]
     imp = imp.merge(b, on="osm_id", how="left")
+    # parts of one building (overlapping footprints) share the earliest wetting and the deepest water
+    g = imp.groupby("grp")
+    imp["first_wet_min"] = g["first_wet_min"].transform("min")
+    imp["max_depth_m"] = g["max_depth_m"].transform("max")
     crit = imp["critical"].notna().to_numpy()
     static_idx = tier_index(imp["hand_m"].to_numpy(), crit)
     imp["tier"] = tier_names(scenario_tier_index(imp["max_depth_m"].to_numpy(), crit, static_idx))

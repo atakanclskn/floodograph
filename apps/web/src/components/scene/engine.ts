@@ -15,7 +15,7 @@ import { decodeDepth, decodeVel, FrameStore, openSource, type SceneSource } from
 import { Debris } from "./debris";
 import { FloodField } from "./field";
 import { GridGeo, type LngLat } from "./geo";
-import { FOG, sceneStyle } from "./scene-style";
+import { FOG, hideOwnBuildings, sceneStyle } from "./scene-style";
 import { Spray } from "./spray";
 import { groundForGrid } from "./terrain";
 import { foamTexture, gridTexture, rippleNormalTexture } from "./textures";
@@ -176,7 +176,7 @@ export class FloodEngine {
       const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const map = new maplibregl.Map({
         container: this.container,
-        style: sceneStyle(geo.corners),
+        style: sceneStyle(),
         center: geo.center,
         zoom: this.narrow ? 12.2 : 12.9,
         pitch: 48,
@@ -255,6 +255,7 @@ export class FloodEngine {
       if (this.disposed) return;
       const b = createBuildings(fc, this.geo, this.ground, this.shared, this.night);
       this.buildings = b;
+      if (this.map) hideOwnBuildings(this.map, fc.features.map((f) => f.properties.id));
       this.shared.uMask.value = b.maskTex;
       this.debris?.setMask(b.mask);
       this.scene.add(b.mesh);

@@ -1,22 +1,20 @@
-import type { StyleSpecification } from "maplibre-gl";
+import type { ExpressionSpecification, Map as MlMap, StyleSpecification } from "maplibre-gl";
 import { TERRARIUM_URL } from "./terrain";
 
 /** Night-quiet base for the cinematic scene: terrain, water, a hint of roads. The flood carries the colour. */
 export const FOG = "#0b1216";
 
 /**
- * Every OSM building in the country as a 3D extrusion (OpenFreeMap). Inside the simulation grid our own buildings
- * (with flood state) are drawn instead, so the basemap ones are filtered out there to avoid doubled walls.
+ * Every OSM building in the country as a 3D extrusion (OpenFreeMap). Where we draw our own analysed buildings,
+ * the basemap copies are hidden by OSM id (see hideOwnBuildings), so no building is drawn twice.
  */
-export function basemapBuildings(exclude?: [number, number][], color = "#1d262b"): never {
-  const filter = exclude ? { filter: ["!", ["within", { type: "Polygon", coordinates: [[...exclude, exclude[0]!]] }]] } : {};
+export function basemapBuildings(color = "#1d262b"): never {
   return {
     id: "basemap-buildings",
     type: "fill-extrusion",
     source: "omt",
     "source-layer": "building",
     minzoom: 13,
-    ...filter,
     paint: {
       "fill-extrusion-color": color,
       "fill-extrusion-height": ["coalesce", ["get", "render_height"], 9],
@@ -26,7 +24,21 @@ export function basemapBuildings(exclude?: [number, number][], color = "#1d262b"
   } as never;
 }
 
-export function sceneStyle(exclude?: [number, number][]): StyleSpecification {
+/**
+ * Hide the basemap copies of buildings we draw ourselves. OpenFreeMap (Planetiler/OpenMapTiles) feature ids are
+ * OSM id x 10 + an element-type digit, and our building ids are OSM ids (negative for relations; ML footprints
+ * use ids from 9e12 and have no basemap copy). A `match` over the id list is a hash lookup, cheap per feature.
+ * (A location filter would not work: MapLibre's `within` is only defined for points and lines, not polygons.)
+ */
+export function hideOwnBuildings(map: MlMap, ids: Iterable<number>) {
+  if (!map.getLayer("basemap-buildings")) return;
+  const labels = [...new Set([...ids].filter((id) => Number.isFinite(id) && Math.abs(id) < 9e12).map((id) => Math.abs(id)))];
+  if (!labels.length) return;
+  const osmId: ExpressionSpecification = ["floor", ["/", ["to-number", ["coalesce", ["id"], 0]], 10]];
+  map.setFilter("basemap-buildings", ["match", osmId, labels, false, true] as unknown as ExpressionSpecification);
+}
+
+export function sceneStyle(): StyleSpecification {
   const dem = { type: "raster-dem" as const, encoding: "terrarium" as const, tiles: [TERRARIUM_URL], tileSize: 256, maxzoom: 15 };
   const road = (classes: string[]) => ["match", ["get", "class"], classes, true, false] as never;
   return {
@@ -123,7 +135,7 @@ export function sceneStyle(exclude?: [number, number][]): StyleSpecification {
           "line-width": ["interpolate", ["exponential", 1.6], ["zoom"], 11, 0.6, 18, 6],
         },
       },
-      basemapBuildings(exclude),
+      basemapBuildings(),
       {
         id: "place-label",
         type: "symbol",

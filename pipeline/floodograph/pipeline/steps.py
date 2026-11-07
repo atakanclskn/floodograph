@@ -52,6 +52,32 @@ def _aoi(city: CityConfig) -> gpd.GeoSeries:
     return gpd.GeoSeries([box(*city.bbox)], crs=4326)
 
 
+OVERLAP_SHARE = 0.2  # footprints overlapping by more than this share of the smaller one are one building
+
+
+def overlap_groups(geoms: gpd.GeoSeries) -> np.ndarray:
+    """Group ids for footprints that are really one building drawn as several overlapping polygons
+    (OSM outlines with nested blocks / wings). Shared walls between row houses (zero-area contact) do not count."""
+    import shapely
+    from scipy.sparse import coo_matrix
+    from scipy.sparse.csgraph import connected_components
+
+    g = geoms.values
+    n = len(g)
+    tree = shapely.STRtree(g)
+    i, j = tree.query(g, predicate="intersects")
+    keep = i < j
+    i, j = i[keep], j[keep]
+    if len(i):
+        inter = shapely.area(shapely.intersection(g[i], g[j]))
+        area = shapely.area(g)
+        same = inter > OVERLAP_SHARE * np.minimum(area[i], area[j])
+        i, j = i[same], j[same]
+    graph = coo_matrix((np.ones(len(i)), (i, j)), shape=(n, n))
+    _, labels = connected_components(graph, directed=False)
+    return labels
+
+
 def buildings(city: CityConfig) -> gpd.GeoDataFrame:
     """Buildings with HAND (lowest point of the footprint), critical facility tag and urgency tier."""
     h, _ = hydro(city)
@@ -75,6 +101,13 @@ def buildings(city: CityConfig) -> gpd.GeoDataFrame:
         b["critical"] = j.groupby(level=0)["critical"].first().reindex(b.index)
     else:
         b["critical"] = None
+
+    # One building drawn as several overlapping polygons gets one answer: the lowest HAND of its parts (water
+    # enters at the lowest wall) and its critical tag, so a tower is never half "acil" and half "izle".
+    b["grp"] = overlap_groups(b.geometry)
+    grouped = b.groupby("grp")
+    b["hand_m"] = grouped["hand_m"].transform("min")
+    b["critical"] = grouped["critical"].transform(lambda s: s.dropna().iloc[0] if s.notna().any() else None)
 
     b["tier"] = tier_names(tier_index(b["hand_m"].to_numpy(), b["critical"].notna().to_numpy()))
     return b.to_crs(4326)
