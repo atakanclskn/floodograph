@@ -226,7 +226,7 @@ export class Debris {
         const [vx, vy] = geo.velocityToLocal(SCRATCH.u, SCRATCH.v);
         const sp = Math.hypot(vx, vy);
         // visual drift: a few metres per real second per m/s of modelled flow
-        const step = dtVisual * 3.2 * k.drift;
+        const step = dtVisual * 9 * k.drift;
         const nxp = o.x + vx * step;
         const nyp = o.y + vy * step;
         if (this.free(nxp, nyp)) {

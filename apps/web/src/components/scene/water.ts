@@ -28,6 +28,9 @@ export const FIELD_GLSL = /* glsl */ `
   const float D_MAX = ${D_MAX.toFixed(1)};
   const float V_MAX = ${V_MAX.toFixed(1)};
   const float DRAW_EPS = ${DRAW_EPS};
+  // Visual flow clock. Playback runs minutes per second, so surface patterns travel FLOW_X times faster
+  // than the modelled velocity; direction and relative speed still come from the model.
+  const float FLOW_X = 5.0;
   float fieldDepth(vec2 uv) {
     vec4 a = texture2D(uA, uv);
     vec4 b = texture2D(uB, uv);
@@ -81,9 +84,10 @@ const vertex = /* glsl */ `
     float wet = smoothstep(DRAW_EPS, 0.4, d);
     // Geometry carries only long waves (>= 4 vertex spacings, or they alias into moire); short ones live in the normals.
     float lam = 28.0 + 9.0 * sp;
-    float ph = dot(p, dir) * 6.2832 / lam - uTime * (0.9 + 0.8 * sp) + 0.9 * sin(dot(p, nrm) * 0.06 + uTime * 0.35);
+    float ft = uTime * FLOW_X;
+    float ph = dot(p, dir) * 6.2832 / lam - ft * (0.5 + 0.6 * sp) + 0.9 * sin(dot(p, nrm) * 0.06 + uTime * 0.35);
     float crest = pow(0.5 + 0.5 * sin(ph), 2.2);
-    float xw = sin(dot(p, nrm) * 0.13 + dot(p, dir) * 0.05 - uTime * 0.9);
+    float xw = sin(dot(p, nrm) * 0.13 + dot(p, dir) * 0.05 - ft * 0.35);
     float amp = wet * min(0.04 + 0.14 * sp, 0.5) * min(d * 1.2, 1.0);
     // stagnation head where the current runs into a wall: v^2 / 2g, the height moving water piles up to
     float m = texture2D(uMask, uv).r;
@@ -131,7 +135,8 @@ const fragment = /* glsl */ `
     if (Ng.z < 0.0) Ng = -Ng;
     // ... plus broad ripples stretched along the flow and scrolling with it (no fine glitter)
     float stretch = 1.0 + sp * 0.9;
-    float scroll = uTime * (0.25 + sp * 0.9);
+    float ft = uTime * FLOW_X;
+    float scroll = ft * (0.35 + sp * 1.1);
     vec2 r1 = texture2D(uNormalTex, vec2((q.x - scroll) / (16.0 * stretch), q.y / 16.0)).xy * 2.0 - 1.0;
     vec2 r2 = texture2D(uNormalTex, vec2((q.x - scroll * 1.6) / (6.5 * stretch), q.y / 6.5 + 0.37)).xy * 2.0 - 1.0;
     vec3 V = normalize(uCam - vPos);
@@ -157,16 +162,16 @@ const fragment = /* glsl */ `
     float spec = pow(max(dot(R, L), 0.0), 90.0) * 0.5;
 
     // turbid flood water: clay-brown when shallow, near-black chocolate when deep; mostly seen by what it reflects
-    vec3 shallow = vec3(0.30, 0.225, 0.14);
-    vec3 mid = vec3(0.16, 0.115, 0.07);
-    vec3 deep = vec3(0.06, 0.045, 0.03);
+    vec3 shallow = vec3(0.62, 0.45, 0.24);
+    vec3 mid = vec3(0.46, 0.31, 0.15);
+    vec3 deep = vec3(0.27, 0.17, 0.08);
     vec3 base = mix(shallow, mid, smoothstep(0.05, 0.7, d));
     base = mix(base, deep, smoothstep(0.7, 3.5, d));
-    float diff = 0.45 + 0.35 * max(dot(N, L), 0.0);
+    float diff = 0.62 + 0.38 * max(dot(N, L), 0.0);
     vec3 col = base * diff;
 
     // foam streaks drawn out along the current, travelling with it
-    float sAlong = (q.x - uTime * (0.6 + sp * 2.2)) / (10.0 + sp * 7.0);
+    float sAlong = (q.x - ft * (0.7 + sp * 2.4)) / (14.0 + sp * 9.0);
     float streak = texture2D(uFoamTex, vec2(sAlong, q.y / 2.6)).r;
     streak = streak * 0.65 + texture2D(uFoamTex, vec2(sAlong * 0.43 + 0.5, q.y / 6.0 + 0.2)).r * 0.35;
     // whitewater: fast flow, wave crests, water piling against walls, and the thin advancing front
@@ -184,10 +189,10 @@ const fragment = /* glsl */ `
     col = mix(col, vec3(0.74, 0.70, 0.62) * (0.65 + 0.35 * diff), clamp(foam * 0.92 + silt, 0.0, 1.0));
 
     float rim = 1.0 - smoothstep(DRAW_EPS, 0.1, d);
-    col = mix(col, vec3(0.26, 0.2, 0.13), rim * 0.5);
-    col = mix(col, sky, clamp(fres, 0.0, 0.85) * (1.0 - foam)) + spec * vec3(1.0, 0.9, 0.75) * (1.0 - foam);
+    col = mix(col, vec3(0.70, 0.55, 0.34), rim * 0.45);
+    col = mix(col, sky, clamp(fres * 0.75, 0.0, 0.55) * (1.0 - foam)) + spec * vec3(1.0, 0.9, 0.75) * (1.0 - foam);
     col = applyFog(col, vPos);
-    float alpha = smoothstep(DRAW_EPS, 0.1, d) * 0.94 + fres * 0.05 + foam * 0.1;
+    float alpha = smoothstep(DRAW_EPS, 0.1, d) * 0.97 + fres * 0.03 + foam * 0.1;
     gl_FragColor = vec4(col, clamp(alpha, 0.0, 1.0));
   }
 `;
