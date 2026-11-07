@@ -47,6 +47,7 @@ const vertex = /* glsl */ `
   varying float vWetK;
   varying float vFlash;
   varying float vTier;
+  varying float vSince;
   void main() {
     float since = uSimT - aInfo.x;
     float here = fieldDepth(aUv);
@@ -54,6 +55,7 @@ const vertex = /* glsl */ `
     // wet line: the water standing against the walls now, plus a damp band once the building has been reached
     vWetLine = max(here > DRAW_EPS ? here + 0.25 : 0.0, 0.7 * vWetK);
     vFlash = since >= 0.0 ? exp(-since / 14.0) : 0.0;
+    vSince = since;
     vTier = aInfo.w;
     vec3 p = position;
     float sev = aFail.w;
@@ -93,6 +95,7 @@ const fragment = /* glsl */ `
   varying float vFlash;
   varying float vTier;
   varying float vRuin;
+  varying float vSince;
 
   float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
 
@@ -128,14 +131,17 @@ const fragment = /* glsl */ `
     col = mix(col, col * 0.6 + ember * 0.22, vWetK * roof * tierW);
     col += ember * vFlash * (0.25 + 0.5 * roof);
 
-    // alarm: once the water reaches an urgent (orange) or high-priority (yellow) building, it keeps blinking
+    // alarm: when the water first reaches an urgent (orange) or high-priority (yellow) building it blinks for
+    // 40 simulated minutes -- the "intervene here now" moment, on each building's own clock -- then stays lit
     float isAcil = step(2.5, vTier);
     float isHigh = step(1.5, vTier) * (1.0 - isAcil);
     float alarmOn = step(0.0001, vWetK) * (isAcil + isHigh);
-    float blink = mix(0.6, 0.5 + 0.5 * sin(uTime * 8.2), uBlink);
+    float inWindow = step(0.0, vSince) * (1.0 - step(40.0, vSince));
+    float wave = 0.5 + 0.5 * sin(uTime * 13.0);
+    float blink = mix(0.75, mix(0.75, wave, inWindow), uBlink);
     vec3 alarmCol = mix(vec3(1.0, 0.78, 0.22), vec3(1.0, 0.36, 0.14), isAcil);
-    col = mix(col, alarmCol * (0.55 + 0.45 * diff), alarmOn * (0.3 + 0.6 * blink));
-    col += alarmCol * alarmOn * blink * 0.35;
+    col = mix(col, alarmCol * (0.55 + 0.45 * diff), alarmOn * (0.35 + 0.55 * blink));
+    col += alarmCol * alarmOn * blink * inWindow * 0.45;
 
     // damaged / destroyed: broken concrete and mud, a few cracks catching the ember light
     float grit = hash(floor(vPos.xy * 1.3) + floor(vPos.z * 1.3));

@@ -121,14 +121,23 @@ const wetHeight = (t: number): ExpressionSpecification => [
 
 /** Alarm: once the water has reached them, urgent (orange) and high-priority (yellow) buildings blink. */
 const ALARM_TIERS = ["acil", "yuksek"] as const;
+/** How long (simulated minutes) a building blinks after the water first reaches it; afterwards it stays lit. */
+const BLINK_MIN = 40;
 const NONE: ExpressionSpecification = ["==", ["get", "id"], -1];
 /** Alarmed buildings are drawn ONLY by the alarm layer (taken out of "buildings"), so no wall is drawn twice
  * (coplanar walls z-fight). The selected building stays in "buildings" and keeps its white highlight. */
+const FW: ExpressionSpecification = ["to-number", ["coalesce", ["get", "fw"], NEVER]];
 const alarmFilter = (t: number, selectedId: number | null): ExpressionSpecification => [
   "all",
-  ["<=", ["to-number", ["coalesce", ["get", "fw"], NEVER]], t],
+  ["<=", FW, t],
   ["in", ["get", "tier"], ["literal", [...ALARM_TIERS]]],
   ["!=", ["get", "id"], selectedId ?? -1],
+];
+/** Reached after `from` (exclusive) and by `to`: the buildings whose blink window is open right now. */
+const blinkFilter = (from: number, to: number, selectedId: number | null): ExpressionSpecification => [
+  "all",
+  [">", FW, from],
+  alarmFilter(to, selectedId),
 ];
 
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
@@ -252,29 +261,32 @@ export function FloodMap(props: FloodMapProps) {
             "fill-extrusion-opacity": 0.92,
           },
         });
-        map.addLayer({
-          id: "alarm",
-          type: "fill-extrusion",
-          source: "buildings",
-          filter: NONE,
-          paint: {
-            "fill-extrusion-color": ["match", ["get", "tier"], "acil", "#ff5a2b", "#ffc23a"],
-            "fill-extrusion-height": ["+", BASE_H, LIFT],
-            "fill-extrusion-base": 0,
-            "fill-extrusion-opacity": 0.95,
-          },
-        });
+        // alarm: steady once the first-contact moment has passed, blinking during it (each building on its own clock)
+        for (const id of ["alarm", "alarm-blink"]) {
+          map.addLayer({
+            id,
+            type: "fill-extrusion",
+            source: "buildings",
+            filter: NONE,
+            paint: {
+              "fill-extrusion-color": ["match", ["get", "tier"], "acil", "#ff5a2b", "#ffc23a"],
+              "fill-extrusion-height": ["+", BASE_H, LIFT],
+              "fill-extrusion-base": 0,
+              "fill-extrusion-opacity": 0.95,
+            },
+          });
+        }
         map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.32, position: [1.3, 210, 35] });
 
-        map.on("click", ["buildings", "alarm"], (e) => {
+        map.on("click", ["buildings", "alarm", "alarm-blink"], (e) => {
           const f = e.features?.[0];
           latest.current.onSelect(f ? (f.properties as BuildingProps) : null);
         });
         map.on("click", (e) => {
-          if (!map?.queryRenderedFeatures(e.point, { layers: ["buildings", "alarm"] }).length) latest.current.onSelect(null);
+          if (!map?.queryRenderedFeatures(e.point, { layers: ["buildings", "alarm", "alarm-blink"] }).length) latest.current.onSelect(null);
         });
-        map.on("mouseenter", ["buildings", "alarm"], () => map && (map.getCanvas().style.cursor = "pointer"));
-        map.on("mouseleave", ["buildings", "alarm"], () => map && (map.getCanvas().style.cursor = ""));
+        map.on("mouseenter", ["buildings", "alarm", "alarm-blink"], () => map && (map.getCanvas().style.cursor = "pointer"));
+        map.on("mouseleave", ["buildings", "alarm", "alarm-blink"], () => map && (map.getCanvas().style.cursor = ""));
         setMapReady(true);
 
         if (!data) return;
@@ -396,26 +408,32 @@ export function FloodMap(props: FloodMapProps) {
     const sel = selectedId;
     if (mode === "static") {
       map.setFilter("alarm", NONE);
+      map.setFilter("alarm-blink", NONE);
       map.setFilter("buildings", tierFilter(activeTiers));
       map.setPaintProperty("buildings", "fill-extrusion-color", tierColor(sel));
       map.setPaintProperty("buildings", "fill-extrusion-height", tierHeight());
       return;
     }
-    let applied = -1;
+    let applied = "";
     const apply = (t: number) => {
-      const n = fwRef.current ? countAtMost(fwRef.current, t) : 0;
-      if (n === applied) return;
-      applied = n;
-      // pin the threshold to the latest fw actually crossed so equal counts give identical expressions
-      const tt = n > 0 && fwRef.current ? fwRef.current[n - 1]! : -1;
+      const fws = fwRef.current;
+      const n = fws ? countAtMost(fws, t) : 0; // reached by now
+      const m = fws ? countAtMost(fws, t - BLINK_MIN) : 0; // reached long enough ago to stop blinking
+      const key = `${n}|${m}`;
+      if (key === applied) return;
+      applied = key;
+      // pin thresholds to fw values actually crossed so equal counts give identical expressions
+      const tt = n > 0 && fws ? fws[n - 1]! : -1;
+      const tm = m > 0 && fws ? fws[m - 1]! : -1;
       map.setPaintProperty("buildings", "fill-extrusion-color", wetColor(tt, sel));
       map.setPaintProperty("buildings", "fill-extrusion-height", wetHeight(tt));
       if (n > 0) {
-        const alarm = alarmFilter(tt, sel);
-        map.setFilter("alarm", alarm);
-        map.setFilter("buildings", ["!", alarm]);
+        map.setFilter("alarm", m > 0 ? alarmFilter(tm, sel) : NONE);
+        map.setFilter("alarm-blink", blinkFilter(tm, tt, sel));
+        map.setFilter("buildings", ["!", alarmFilter(tt, sel)]);
       } else {
         map.setFilter("alarm", NONE);
+        map.setFilter("alarm-blink", NONE);
         map.setFilter("buildings", null);
       }
     };
@@ -426,17 +444,17 @@ export function FloodMap(props: FloodMapProps) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!mapReady || !map?.getLayer("alarm") || mode !== "scenario") return;
+    if (!mapReady || !map?.getLayer("alarm-blink") || mode !== "scenario") return;
     if (prefersReducedMotion()) {
-      map.setPaintProperty("alarm", "fill-extrusion-opacity", 0.85);
+      map.setPaintProperty("alarm-blink", "fill-extrusion-opacity", 0.95);
       return;
     }
     let raf = 0;
     const t0 = performance.now();
     const pulse = (now: number) => {
       raf = requestAnimationFrame(pulse);
-      const s = 0.5 + 0.5 * Math.sin(((now - t0) / 1000) * Math.PI * 2 * 1.3);
-      map.setPaintProperty("alarm", "fill-extrusion-opacity", 0.5 + 0.5 * s);
+      const s = 0.5 + 0.5 * Math.sin(((now - t0) / 1000) * Math.PI * 2 * 2.2);
+      map.setPaintProperty("alarm-blink", "fill-extrusion-opacity", 0.3 + 0.7 * s);
     };
     raf = requestAnimationFrame(pulse);
     return () => cancelAnimationFrame(raf);
