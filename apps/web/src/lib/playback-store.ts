@@ -16,7 +16,7 @@ type PlaybackState = {
   tStart: number;
   playing: boolean;
   speed: Speed;
-  /** live flooded area (ha, depth > wet threshold) of the frame on screen */
+  /** live flooded area (ha, depth > AREA_THRESHOLD_M) of the frame on screen */
   liveHa: number;
   setMode: (m: DemoMode) => void;
   setRange: (tEnd: number, tStart: number) => void;

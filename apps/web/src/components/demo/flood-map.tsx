@@ -13,7 +13,7 @@ import { tierFromHand, type BuildingProps, type CorridorProps, type GridMeta, ty
 import { floodRepository } from "@/lib/repository";
 import { CORRIDOR_STYLE, TIER_COLOR, TIER_ORDER, type CorridorKind } from "@/lib/tier-style";
 import { usePlayback, type DemoMode } from "@/lib/playback-store";
-import { SCENARIO_ID, WET_THRESHOLD_M, countAtMost } from "@/lib/scenario";
+import { AREA_THRESHOLD_M, SCENARIO_ID, countAtMost } from "@/lib/scenario";
 import { WaterPainter, type FrameStore } from "@/lib/water-frames";
 import { buildBaseStyle, CONTOUR_LAYERS } from "./map-style";
 
@@ -260,6 +260,9 @@ export function FloodMap(props: FloodMapProps) {
     const map = mapRef.current;
     if (!mapReady || !map || !grid || !frames) return;
     const painter = new WaterPainter(grid);
+    // a previous run of this effect (dev double-invoke, fast refresh) may have left them behind
+    if (map.getLayer("water")) map.removeLayer("water");
+    if (map.getSource("water")) map.removeSource("water");
     map.addSource("water", { type: "canvas", canvas: painter.canvas, animate: false, coordinates: grid.corners_lonlat });
     map.addLayer(
       {
@@ -297,7 +300,7 @@ export function FloodMap(props: FloodMapProps) {
       const key = `${a.tMin}|${b.tMin}|${alpha.toFixed(3)}`;
       if (key === drawnKey) return;
       drawnKey = key;
-      const ha = painter.paint(a, b, alpha, WET_THRESHOLD_M);
+      const ha = painter.paint(a, b, alpha, AREA_THRESHOLD_M);
       usePlayback.getState().setLiveHa(ha);
       // copy the canvas into the GL texture once (play() then pause() uploads a single frame)
       source.play();

@@ -8,6 +8,8 @@ export const RAIN_SOURCE_NOTE = "Yağış: Open-Meteo zamansal deseni, Sarıyer 
 
 /** Building wet threshold used by the simulator (summary.params.wet_threshold_m). */
 export const WET_THRESHOLD_M = 0.15;
+/** Depth that counts as flooded ground in the simulator's area metric (timeline wet_ha). */
+export const AREA_THRESHOLD_M = 0.05;
 
 const clockFmt = new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", hour: "2-digit", minute: "2-digit" });
 const dayFmt = new Intl.DateTimeFormat("tr-TR", { timeZone: "Europe/Istanbul", day: "numeric", month: "long", weekday: "long" });

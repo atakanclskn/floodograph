@@ -190,7 +190,7 @@ html[data-refract] .glass {
   filter: invert(1);
 }
 /* The demo sets --map-ctrl-bottom to the height of whatever covers the bottom edge (timeline, sheet). */
-.maplibregl-ctrl-bottom-right {
+.maplibregl-map .maplibregl-ctrl-bottom-right {
   bottom: var(--map-ctrl-bottom, 0px);
   transition: bottom 240ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
@@ -336,7 +336,7 @@ html[data-refract] .glass {
   .fg-indeterminate::after {
     animation-duration: 3s;
   }
-  .maplibregl-ctrl-bottom-right {
+  .maplibregl-map .maplibregl-ctrl-bottom-right {
     transition: none;
   }
 }

@@ -42,7 +42,7 @@ export function LiveCounters({
         )}
       </div>
       <div className={`rounded-2xl bg-white/5 ${compact ? "px-3 py-2" : "p-3"}`}>
-        <div className="text-xs text-fg-3">Su altında (&gt;15 cm)</div>
+        <div className="text-xs text-fg-3">Su altında (&gt;5 cm)</div>
         {hasFrames ? (
           <span className={`font-mono ${big} font-medium tracking-[-0.03em]`}>
             <AnimatedNumber value={ha} digits={0} />

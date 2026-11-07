@@ -12,7 +12,7 @@ export function usePlaybackLoop(enabled: boolean): void {
     let raf = 0;
     let last = performance.now();
     const tick = (now: number) => {
-      const dt = Math.min(0.1, (now - last) / 1000); // a background tab must not jump an hour
+      const dt = Math.min(0.5, (now - last) / 1000); // a throttled tab must not jump hours ahead
       last = now;
       const s = usePlayback.getState();
       const next = s.t + dt * BASE_MIN_PER_SEC * s.speed;

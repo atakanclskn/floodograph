@@ -24,6 +24,8 @@ export function MobileSheet({
   const peekRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [dims, setDims] = useState({ sheet: 0, peek: 0 });
+  // first placement jumps into position; later changes spring
+  const [placed, setPlaced] = useState(false);
   const controls = useDragControls();
 
   useLayoutEffect(() => {
@@ -35,7 +37,11 @@ export function MobileSheet({
     const ro = new ResizeObserver(measure);
     ro.observe(sheet);
     ro.observe(pk);
-    return () => ro.disconnect();
+    const raf = requestAnimationFrame(() => setPlaced(true));
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
   }, []);
 
   useEffect(() => onPeekHeight(dims.peek + 8), [dims.peek, onPeekHeight]);
@@ -52,8 +58,9 @@ export function MobileSheet({
       aria-label={label}
       className="glass absolute inset-x-2 bottom-2 z-20 flex max-h-[82dvh] flex-col rounded-[26px] pb-[env(safe-area-inset-bottom)]"
       initial={false}
+      style={{ visibility: dims.sheet ? "visible" : "hidden" }}
       animate={{ y: open ? 0 : closedY }}
-      transition={spring}
+      transition={placed ? spring : { duration: 0 }}
       drag="y"
       dragControls={controls}
       dragListener={false}
