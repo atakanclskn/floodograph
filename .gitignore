@@ -1,0 +1,27 @@
+# Ortam değişkenleri: gizli anahtarlar asla repoya girmez
+.env
+.env.*
+!.env.example
+
+# Hesaplama önbelleği ve büyük veri
+data/
+*.tif
+*.tiff
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Node
+node_modules/
+dist/
+.vercel/
+
+# Editör ve sistem
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
