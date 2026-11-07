@@ -8,7 +8,10 @@
   <img alt="durum" src="https://img.shields.io/badge/durum-MVP%20geli%C5%9Ftiriliyor-orange">
   <img alt="etkinlik" src="https://img.shields.io/badge/EkoZeka-2026-green">
   <img alt="lisans" src="https://img.shields.io/badge/lisans-MIT-blue">
+  <a href="https://muhur-phi.vercel.app/sergi/ekozeka-2026/6"><img alt="mühür" src="https://muhur-phi.vercel.app/api/rozet/ekozeka-2026/6"></a>
 </p>
+
+<p align="center"><a href="https://floodograph.vercel.app"><strong>floodograph.vercel.app</strong></a></p>
 
 ---
 
