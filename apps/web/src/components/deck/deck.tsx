@@ -598,7 +598,8 @@ const SLIDES: Slide[] = [
     nav: "Çağrı",
     mood: { ...riverShot(-700, { dx: -650, dy: -700, dz: 520 }), depth: 3, rain: 0.1, buried: 0.5, contour: 0.6, ember: 0 },
     body: () => (
-      <>
+      <div className="grid items-center gap-6 md:grid-cols-[minmax(0,1fr)_auto] md:gap-12">
+        <motion.div variants={group} className="flex min-w-0 flex-col gap-4 sm:gap-6 [@media(max-height:720px)]:gap-3">
         <Eyebrow>Takım SALU</Eyebrow>
         <motion.ul variants={group} className="flex flex-wrap gap-2">
           {["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"].map((n) => (
@@ -632,7 +633,21 @@ const SLIDES: Slide[] = [
           </a>
         </motion.p>
         <Note>Veri: FABDEM CC BY-NC-SA, OSM ve Overture ODbL, ERA5, İBB.</Note>
-      </>
+        </motion.div>
+        {/* scan to open the live site on a phone */}
+        <motion.figure variants={item} className="flex flex-col items-center gap-3 justify-self-start md:justify-self-end">
+          <div className="rounded-3xl bg-white p-[clamp(10px,0.9vw,18px)] shadow-2xl ring-1 ring-white/20">
+            <Image
+              src="/img/qr-floodograph.png"
+              alt="floodograph.vercel.app adresine giden QR kod"
+              width={450}
+              height={450}
+              className="size-[clamp(150px,min(16vw,30vh),300px)]"
+            />
+          </div>
+          <figcaption className="font-mono text-[clamp(13px,min(0.95vw,1.7vh),17px)] text-fg-2">floodograph.vercel.app</figcaption>
+        </motion.figure>
+      </div>
     ),
   },
 ];
