@@ -157,6 +157,19 @@ def cmd_corridor_tiles(args: argparse.Namespace) -> None:
     print(json.dumps(write_tiles(sources, out), ensure_ascii=False, indent=2))
 
 
+def cmd_ladder(args: argparse.Namespace) -> None:
+    """Rain-level ladders for /sehirler, regions uploaded separately for viewport loading."""
+    from .pipeline.rain_ladder import run_ladder, upload_ladder
+
+    cities = load_cities()
+    for cid in args.city:
+        meta = run_ladder(cities[cid], args.loss, args.sharpen, args.shift)
+        res = {"city": cid, "regions": len(meta["regions"]), "report": meta["report"], "seconds": meta["seconds"]}
+        if args.upload:
+            res["uploaded"] = upload_ladder(cities[cid])
+        print(json.dumps(res, ensure_ascii=False, indent=2), flush=True)
+
+
 def cmd_calibrate(args: argparse.Namespace) -> None:
     from .pipeline.calibrate import calibrate
 
@@ -209,6 +222,13 @@ def main() -> None:
     ct = sub.add_parser("corridor-tiles", help="Tile city-wide corridors for the web (viewport loading)")
     ct.add_argument("--city", nargs="+", default=["istanbul-kent", "izmir-kent", "ankara-kent"])
     ct.set_defaults(func=cmd_corridor_tiles)
+    ld = sub.add_parser("ladder", help="Whole-city rain ladders (25-300 mm) for the what-if view")
+    ld.add_argument("--city", nargs="+", default=["istanbul-kent", "izmir-kent", "ankara-kent"])
+    ld.add_argument("--loss", type=float, required=True, help="calibrated loss (mm/h)")
+    ld.add_argument("--sharpen", type=float, default=1.0)
+    ld.add_argument("--shift", type=float, default=0.0)
+    ld.add_argument("--upload", action="store_true")
+    ld.set_defaults(func=cmd_ladder)
     cb = sub.add_parser("calibrate", help="Parameter sweep of the pilot model against the 14 Oct observations")
     cb.add_argument("--city", default="istanbul")
     cb.set_defaults(func=cmd_calibrate)

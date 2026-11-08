@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, StyleSpecification } from "maplibre-gl";
 import type { GridFrame, GridMeta, Scenario } from "@floodograph/core";
 import { RainOverlay } from "@/components/rain-overlay";
@@ -36,7 +36,17 @@ const DEEP_M = 1.0;
 const VERY_DEEP_M = 1.5;
 const PULSE_MS = 2600;
 
-type Loaded = { scenario: Scenario; frames: FrameStore };
+type Region = {
+  id: string;
+  scenario: Scenario;
+  grid: GridMeta;
+  box: readonly [number, number, number, number];
+  frames: FrameStore | null;
+  layer: Water3DLayer | null;
+  zero: GridFrame;
+};
+/** At most this many regions drawn at once (each is its own 3D water mesh). */
+const MAX_REGIONS = 10;
 
 /** Flat night base (no 3D terrain: the water sits on z = 0) with every OSM building lit at night. */
 function cityStyle(): StyleSpecification {
@@ -56,16 +66,14 @@ function gridToLngLat(grid: GridMeta, s: number, t: number): [number, number] {
 export function CityFlood() {
   const container = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MlMap | null>(null);
-  const waterRef = useRef<Water3DLayer | null>(null);
   const [mapReady, setMapReady] = useState(false);
   const [cityIdx, setCityIdx] = useState(0);
-  const [data, setData] = useState<Loaded | null>(null);
+  const regionsRef = useRef<Region[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
   const [mm, setMm] = useState(100);
   const mmRef = useRef(mm);
   const [stats, setStats] = useState({ wetHa: 0, urgent: 0, veryUrgent: 0 });
   const seen = useRef(new Map<string, number>()); // block key -> when it first became urgent (for the pulse)
-  const zero = useRef<GridFrame | null>(null);
   const [corr, setCorr] = useState<Record<CorridorKind, number>>({ derived: 0, buried_osm: 0, open: 0 });
   const city = CITIES[cityIdx]!;
 
@@ -182,38 +190,49 @@ export function CityFlood() {
     };
   }, []);
 
-  // rain ladder of the selected city: frames keyed by rain total (mm), not by time
+  // rain ladders of the selected city, one per ~13 km region; frames are keyed by rain total (mm), not by time
   useEffect(() => {
     let cancelled = false;
-    let frames: FrameStore | null = null;
     (async () => {
       setStatus("loading");
-      setData(null);
-      seen.current.clear();
+      clearRegions();
       try {
         const repo = floodRepository();
         const list = await repo.listScenarios(city.id);
-        const scenario = list.find((s) => s.id === `${city.id}-yagis`);
-        if (!scenario?.grid) {
-          if (!cancelled) setStatus("missing");
+        if (cancelled) return;
+        const prefix = `${city.id}-yagis-`;
+        regionsRef.current = list
+          .filter((s) => s.id.startsWith(prefix) && s.grid)
+          .map((s) => {
+            const g = s.grid!;
+            const lons = g.corners_lonlat.map((c) => c[0]);
+            const lats = g.corners_lonlat.map((c) => c[1]);
+            const n = g.nx * g.ny;
+            return {
+              id: s.id,
+              scenario: s,
+              grid: g,
+              box: [Math.min(...lons), Math.min(...lats), Math.max(...lons), Math.max(...lats)] as const,
+              frames: null,
+              layer: null,
+              zero: { tMin: 0, nx: g.nx, ny: g.ny, depth: new Float32Array(n), u: new Float32Array(n), v: new Float32Array(n) },
+            };
+          });
+        if (!regionsRef.current.length) {
+          setStatus("missing");
           return;
         }
-        const refs = await repo.gridFrames(scenario.id);
-        if (cancelled) return;
-        frames = new FrameStore(repo, scenario.id, refs, scenario.grid);
-        const n = scenario.grid.nx * scenario.grid.ny;
-        zero.current = { tMin: 0, nx: scenario.grid.nx, ny: scenario.grid.ny, depth: new Float32Array(n), u: new Float32Array(n), v: new Float32Array(n) };
-        frames.want(mmRef.current, frames.size, 0); // the ladder is short: fetch every level
-        setData({ scenario, frames });
         setStatus("ready");
+        syncRegions();
       } catch {
         if (!cancelled) setStatus("error");
       }
     })();
     return () => {
       cancelled = true;
-      frames?.dispose();
+      clearRegions();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- region helpers read refs only
   }, [city.id]);
 
   // fly to the city
@@ -223,57 +242,91 @@ export function CityFlood() {
     map.flyTo({ center: city.center, zoom: city.zoom, pitch: 55, bearing: -20, duration: 2600, essential: true });
   }, [mapReady, city]);
 
-  // 3D water layer
-  useEffect(() => {
+  /** Drop every region of the previous city (layers off the map, frame caches released). */
+  function clearRegions() {
     const map = mapRef.current;
-    if (!mapReady || !map || !data) return;
-    if (map.getLayer("flood-water")) map.removeLayer("flood-water");
-    const water = new Water3DLayer(data.scenario.grid!, "flood-water", false, 1);
-    map.addLayer(water, "basemap-buildings");
-    waterRef.current = water;
-    return () => {
-      if (map.getLayer("flood-water")) map.removeLayer("flood-water");
-      waterRef.current = null;
-    };
-  }, [mapReady, data]);
+    for (const r of regionsRef.current) {
+      if (map && r.layer && map.getLayer(r.layer.id)) map.removeLayer(r.layer.id);
+      r.frames?.dispose();
+    }
+    regionsRef.current = [];
+    seen.current.clear();
+  }
 
-  /** Show the water for `total` mm of rain: blend the two nearest levels of the ladder. */
-  const draw = useCallback(
-    (total: number) => {
-      const water = waterRef.current;
-      const map = mapRef.current;
-      if (!water || !map || !data || !zero.current) return;
-      const fs = data.frames;
-      const first = fs.times[0] ?? 0;
+  /** Load and draw only the regions on screen; regions that leave the screen lose their 3D layer. */
+  function syncRegions() {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    const b = map.getBounds();
+    const padX = (b.getEast() - b.getWest()) * 0.1;
+    const padY = (b.getNorth() - b.getSouth()) * 0.1;
+    const [w, s, e, n] = [b.getWest() - padX, b.getSouth() - padY, b.getEast() + padX, b.getNorth() + padY];
+    let active = 0;
+    const repo = floodRepository();
+    for (const r of regionsRef.current) {
+      const visible = r.box[2] >= w && r.box[0] <= e && r.box[3] >= s && r.box[1] <= n && active < MAX_REGIONS;
+      if (visible) {
+        active++;
+        if (!r.frames) {
+          r.frames = new FrameStore(repo, r.id, [], r.grid);
+          void repo.gridFrames(r.id).then((refs) => {
+            if (!r.frames) return;
+            r.frames.dispose();
+            r.frames = new FrameStore(repo, r.id, refs, r.grid);
+            r.frames.onLoad(() => draw(mmRef.current));
+            r.frames.want(mmRef.current, refs.length, 0); // a ladder is short: fetch every level
+          });
+        }
+        if (!r.layer) {
+          r.layer = new Water3DLayer(r.grid, `flood-water-${r.id}`, false, 1);
+          map.addLayer(r.layer, "basemap-buildings");
+        }
+      } else if (r.layer) {
+        if (map.getLayer(r.layer.id)) map.removeLayer(r.layer.id);
+        r.layer = null;
+      }
+    }
+    draw(mmRef.current);
+  }
+
+  /** Show the water for `total` mm of rain in every region on screen: blend the two nearest ladder levels. */
+  function draw(total: number) {
+    const map = mapRef.current;
+    if (!map) return;
+    const now = performance.now();
+    const features: { type: "Feature"; geometry: { type: "Point"; coordinates: [number, number] }; properties: { d: number; fresh: number } }[] = [];
+    const live = new Set<string>();
+    let wetHa = 0;
+    let veryUrgent = 0;
+    for (const r of regionsRef.current) {
+      if (!r.layer || !r.frames) continue;
+      const fs = r.frames;
+      const first = fs.times[0];
+      if (first == null) continue;
       let a: GridFrame | undefined;
       let b: GridFrame | undefined;
       let alpha = 0;
       if (total <= first) {
-        a = zero.current;
+        a = r.zero;
         b = fs.get(first);
         alpha = first > 0 ? total / first : 1;
       } else {
         const br = fs.bracket(total);
-        if (!br) return;
+        if (!br) continue;
         a = fs.get(br.a);
         b = fs.get(br.b);
         alpha = br.alpha;
       }
-      if (!a || !b) return; // still streaming
-      water.setFrames(a, b, alpha);
+      if (!a || !b) continue; // still streaming
+      r.layer.setFrames(a, b, alpha);
 
-      // statistics and urgent blocks from the blended depth
-      const grid = data.scenario.grid!;
-      const { nx, ny } = grid;
-      const cellHa = grid.res_m ** 2 / 1e4;
+      const { nx, ny } = r.grid;
+      const cellHa = r.grid.res_m ** 2 / 1e4;
       const da = a.depth;
       const db = b.depth;
       let wet = 0;
       for (let i = 0; i < da.length; i++) if (da[i]! * (1 - alpha) + db[i]! * alpha > 0.1) wet++;
-      const now = performance.now();
-      const features: { type: "Feature"; geometry: { type: "Point"; coordinates: [number, number] }; properties: { d: number; fresh: number } }[] = [];
-      let veryUrgent = 0;
-      const live = new Set<string>();
+      wetHa += wet * cellHa;
       for (let bj = 0; bj < ny; bj += BLOCK)
         for (let bi = 0; bi < nx; bi += BLOCK) {
           let dmax = 0;
@@ -284,39 +337,46 @@ export function CityFlood() {
               if (d > dmax) dmax = d;
             }
           if (dmax < DEEP_M) continue;
-          const key = `${bi},${bj}`;
+          const key = `${r.id}:${bi},${bj}`;
           live.add(key);
           if (!seen.current.has(key)) seen.current.set(key, now);
-          const fresh = now - seen.current.get(key)! < PULSE_MS ? 1 : 0;
           if (dmax >= VERY_DEEP_M) veryUrgent++;
           features.push({
             type: "Feature",
-            geometry: { type: "Point", coordinates: gridToLngLat(grid, (bi + BLOCK / 2) / nx, (bj + BLOCK / 2) / ny) },
-            properties: { d: Math.round(dmax * 100) / 100, fresh },
+            geometry: { type: "Point", coordinates: gridToLngLat(r.grid, (bi + BLOCK / 2) / nx, (bj + BLOCK / 2) / ny) },
+            properties: { d: Math.round(dmax * 100) / 100, fresh: now - seen.current.get(key)! < PULSE_MS ? 1 : 0 },
           });
         }
-      // a block that dried out may pulse again when the rain is raised back
-      for (const k of [...seen.current.keys()]) if (!live.has(k)) seen.current.delete(k);
-      (map.getSource("urgent") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
-      setStats({ wetHa: wet * cellHa, urgent: features.length, veryUrgent });
-    },
-    [data],
-  );
+    }
+    // a block that dried out may pulse again when the rain is raised back
+    for (const k of [...seen.current.keys()]) if (!live.has(k)) seen.current.delete(k);
+    (map.getSource("urgent") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+    setStats({ wetHa, urgent: features.length, veryUrgent });
+  }
 
   useEffect(() => {
     mmRef.current = mm;
     draw(mm);
-  }, [mm, draw]);
+     
+  }, [mm]);
+  // follow the screen: load / drop regions when the view settles
   useEffect(() => {
-    if (!data) return;
-    return data.frames.onLoad(() => draw(mmRef.current));
-  }, [data, draw]);
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const onMove = () => syncRegions();
+    map.on("moveend", onMove);
+    syncRegions();
+    return () => {
+      map.off("moveend", onMove);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- region helpers read refs only
+  }, [mapReady]);
   // keep the pulse ticking: fresh flags expire after PULSE_MS
   useEffect(() => {
-    if (!data) return;
     const id = setInterval(() => draw(mmRef.current), 700);
     return () => clearInterval(id);
-  }, [data, draw]);
+     
+  }, []);
   // the pulse ring breathes
   useEffect(() => {
     const map = mapRef.current;

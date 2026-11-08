@@ -20,8 +20,12 @@ export function RainOverlay({ intensity }: { intensity: () => number }) {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     const lite = window.matchMedia("(max-width: 767px), (pointer: coarse)").matches;
-    const MAX = lite ? 260 : 700;
-    const drops = Array.from({ length: MAX }, () => ({ x: Math.random(), y: Math.random(), l: 0.5 + Math.random(), v: 0.75 + Math.random() * 0.5, a: 0.25 + Math.random() * 0.6 }));
+    const MAX = lite ? 450 : 1300;
+    // z = depth: far drops are short, faint and slow, near ones long, brighter and fast (as on the landing page)
+    const drops = Array.from({ length: MAX }, () => {
+      const z = Math.random() ** 1.6;
+      return { x: Math.random(), y: Math.random(), z, l: 0.6 + Math.random() * 0.8 };
+    });
     let raf = 0;
     let last = performance.now();
     let level = 0;
@@ -44,23 +48,25 @@ export function RainOverlay({ intensity }: { intensity: () => number }) {
       ctx.clearRect(0, 0, w, h);
       const n = Math.round(MAX * level);
       if (n === 0) return;
-      const len = h * (0.025 + 0.035 * level);
-      const slant = 0.18;
-      ctx.lineCap = "round";
-      ctx.lineWidth = Math.max(1, w / 1400);
+      const slant = 0.035; // almost vertical, a touch of wind
+      ctx.lineCap = "butt";
+      const thin = Math.max(0.8, w / 2200);
       for (let i = 0; i < n; i++) {
         const d = drops[i]!;
-        d.y += dt * d.v * (1.6 + 1.4 * level);
-        d.x += dt * d.v * slant * 0.6;
-        if (d.y > 1.05) {
-          d.y = -0.05;
-          d.x = Math.random() * 1.1 - 0.05;
+        const speed = 0.9 + 2.2 * d.z; // screen heights per second
+        d.y += dt * speed * (0.8 + 0.4 * level);
+        d.x += dt * speed * slant;
+        if (d.y > 1.1) {
+          d.y = -0.1 - Math.random() * 0.1;
+          d.x = Math.random() * 1.04 - 0.02;
         }
-        if (d.x > 1.05) d.x -= 1.1;
+        if (d.x > 1.02) d.x -= 1.04;
         const x = d.x * w;
         const y = d.y * h;
-        const l = len * d.l;
-        ctx.strokeStyle = `rgba(190, 215, 235, ${(d.a * (0.35 + 0.5 * level)).toFixed(3)})`;
+        const l = h * (0.03 + 0.11 * d.z) * d.l;
+        const alpha = (0.12 + 0.45 * d.z) * (0.45 + 0.55 * level);
+        ctx.lineWidth = thin * (0.7 + 0.9 * d.z);
+        ctx.strokeStyle = `rgba(178, 205, 230, ${alpha.toFixed(3)})`;
         ctx.beginPath();
         ctx.moveTo(x, y);
         ctx.lineTo(x + l * slant, y + l);

@@ -47,21 +47,22 @@ export const WINDOW_PATTERN = "fg-windows";
  * about a third lit in warm tones, seeded so it is stable between visits. Decorative.
  */
 export function installWindowPattern(map: MlMap) {
-  const W = 48;
-  const H = 48;
+  const W = 32;
+  const H = 32;
   const data = new Uint8Array(W * H * 4);
   let seed = 7;
   const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const wall = [27, 34, 39];
   for (let i = 0; i < W * H; i++) data.set([wall[0]!, wall[1]!, wall[2]!, 255], i * 4);
-  const cell = 12;
+  const cell = 4;
   for (let cy = 0; cy < H / cell; cy++)
     for (let cx = 0; cx < W / cell; cx++) {
-      const lit = rand() < 0.36;
+      const lit = rand() < 0.22;
       const warm = rand();
-      const c = lit ? (warm < 0.7 ? [255, 196, 120] : [255, 226, 168]) : [14, 20, 24];
-      for (let y = cy * cell + 3; y < cy * cell + 10; y++)
-        for (let x = cx * cell + 3; x < cx * cell + 9; x++) data.set([c[0]!, c[1]!, c[2]!, 255], (y * W + x) * 4);
+      // lit windows warm but muted; unlit ones only a shade darker than the wall
+      const c = lit ? (warm < 0.7 ? [196, 150, 96] : [214, 182, 132]) : [20, 26, 30];
+      for (let y = cy * cell + 1; y < cy * cell + 3; y++)
+        for (let x = cx * cell + 1; x < cx * cell + 3; x++) data.set([c[0]!, c[1]!, c[2]!, 255], (y * W + x) * 4);
     }
   const add = () => {
     try {
