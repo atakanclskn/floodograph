@@ -93,6 +93,18 @@ def run_ladder(city: CityConfig, loss_mm_h: float, sharpen: float, shift_h: floa
     return meta
 
 
+def frame_max_depth(path: Path) -> float:
+    """Deepest water (m) in an encoded frame file (see simulate._encode_frame)."""
+    import struct
+
+    import zstandard as zstd
+
+    raw = zstd.ZstdDecompressor().decompress(path.read_bytes())
+    _, nx, ny, _, dscale, _ = struct.unpack("<HIIIff", raw[4:26])
+    h = np.frombuffer(raw, dtype="<u2", count=nx * ny, offset=26)
+    return float(h.max()) * dscale
+
+
 def upload_ladder(city: CityConfig) -> dict:
     """One scenario per region: id <city>-yagis-<region>, frames keyed by rain total in mm."""
     import pandas as pd
@@ -115,6 +127,9 @@ def upload_ladder(city: CityConfig) -> dict:
                        "manning_n": N_URBAN},
             "mass_balance": {"relative_error": 0.0},
             "results": {"levels": len(meta["levels"])},
+            # per-level deepest water: the web skips frames stored as 0 m (dry), so it must be the real value
+            "timeline": [{"t_min": int(f.stem), "max_depth": frame_max_depth(f)}
+                         for f in (out / reg["id"] / "frames").glob("*.bin")],
         }
         store.replace_scenario(city, summary, [], 60, empty, Path(out / reg["id"] / "frames"),
                                label=f"Yağış senaryoları · {city.name} · {reg['id']}", kind="design", step_min=0)

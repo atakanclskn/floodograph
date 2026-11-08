@@ -1,3 +1,5 @@
+import { FloodedPlaces } from "../places";
+import { trackPitch } from "../rain-overlay";
 import * as maplibregl from "maplibre-gl";
 import type { CustomLayerInterface, CustomRenderMethodInput, Map as MlMap } from "maplibre-gl";
 import * as THREE from "three";
@@ -10,11 +12,11 @@ import {
   wetCount,
   type BuildingIndex,
 } from "./buildings";
-import { AYAZAGA, buildTour, sampleTour, type TourPlan } from "./camera-path";
-import { decodeDepth, decodeVel, FrameStore, openSource, type SceneSource } from "./data";
+import { buildTour, FLOOD_SPOTS, sampleTour, type TourPlan } from "./camera-path";
+import { decodeDepth, FrameStore, openSource, type SceneSource } from "./data";
 import { Debris } from "./debris";
 import { FloodField } from "./field";
-import { GridGeo, type LngLat } from "./geo";
+import { GridGeo } from "./geo";
 import { FOG, hideOwnBuildings, sceneStyle } from "./scene-style";
 import { Spray } from "./spray";
 import { groundForGrid } from "./terrain";
@@ -93,6 +95,8 @@ export class FloodEngine {
   private field: FloodField | null = null;
   private ground: Float32Array | null = null;
   private buildings: BuildingIndex | null = null;
+  /** orange name labels on the schools, hospitals, ... the water reaches */
+  private places: FloodedPlaces | null = null;
   private debris: Debris | null = null;
   private spray: Spray | null = null;
 
@@ -189,6 +193,7 @@ export class FloodEngine {
         canvasContextAttributes: { antialias: !this.lowPower },
       });
       this.map = map;
+      trackPitch(map);
       (window as unknown as { __sceneEngine?: FloodEngine }).__sceneEngine = this; // debugging handle
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       for (const ev of ["dragstart", "rotatestart", "pitchstart", "wheel", "touchstart"] as const)
@@ -256,6 +261,10 @@ export class FloodEngine {
       const b = createBuildings(fc, this.geo, this.ground, this.shared, this.night);
       this.buildings = b;
       if (this.map) hideOwnBuildings(this.map, fc.features.map((f) => f.properties.id));
+      if (this.map) {
+        this.places ??= new FloodedPlaces(this.map);
+        this.places.setBuildings(fc.features as unknown as Parameters<FloodedPlaces["setBuildings"]>[0]);
+      }
       this.shared.uMask.value = b.maskTex;
       this.debris?.setMask(b.mask);
       this.scene.add(b.mesh);
@@ -290,12 +299,12 @@ export class FloodEngine {
     this.set({ stats: { ...this.state.stats, totalDestroyed: res.destroyedCount } });
   }
 
-  /** All frames are in: find the deepest moment and where it happens, build the tour, scatter objects. */
+  /** All frames are in: time the tour to when the water reaches each reported flood spot, build it, scatter objects. */
   private onAllFrames() {
     const store = this.store;
     const geo = this.geo;
     if (!store || !geo || this.tour) return;
-    // the overflow moment: the frame with the widest flooded area ...
+    // fallback timing for the event as a whole: first frame with water, frame with the widest flooded area
     let iPeak = 0;
     let first = -1;
     store.times.forEach((_, i) => {
@@ -304,39 +313,62 @@ export class FloodEngine {
       if (s.wetHa > (store.stats(iPeak)?.wetHa ?? 0)) iPeak = i;
       if (first < 0 && s.wetHa > 2) first = i;
     });
-    // ... and, near the Ayazağa corridor, the spot where deep water moves fastest (5x5 window, away from the edges)
+    const tFirst = store.times[0]!;
+    const tLast = store.times[store.count - 1]!;
+    // street-level depth at each reported spot: 75th percentile of the open (non-building) cells within ~50 m,
+    // the measure the calibration scored (the maximum would report the stream bed next door)
     const { nx, ny } = geo;
+    const mask = this.buildings?.mask ?? null;
+    const R = Math.max(1, Math.round(50 / geo.resM));
+    const spots = FLOOD_SPOTS.flatMap((p) => {
+      const [fx, fy] = geo.localToCell(...geo.lngLatToLocal(p.at));
+      const ci = Math.round(fx);
+      const cj = Math.round(fy);
+      if (ci < R || cj < R || ci >= nx - R || cj >= ny - R) return [];
+      const all: number[] = [];
+      for (let dj = -R; dj <= R; dj++) for (let di = -R; di <= R; di++) all.push((cj + dj) * nx + ci + di);
+      const open = mask ? all.filter((c) => mask[c]! < 0.5) : all;
+      return [{ ...p, cells: open.length >= 5 ? open : all, arrive: Infinity, depth: 0 }];
+    });
+    // the town's peak: the frame where the spots are deepest together (every 3rd frame is plenty for a tour)
     const buf = new Uint8Array(nx * ny * 4);
-    store.expand(iPeak, buf);
-    const score = new Float32Array(nx * ny);
-    for (let c = 0; c < nx * ny; c++) {
-      const d = Math.min(decodeDepth(buf[c * 4]!), 2.5);
-      if (d < 0.1) continue;
-      score[c] = d * (0.4 + Math.hypot(decodeVel(buf[c * 4 + 1]!), decodeVel(buf[c * 4 + 2]!)));
+    const vals: number[] = [];
+    const step = store.count > 120 ? 3 : 1;
+    let tPeak = store.times[iPeak]!;
+    let bestSum = 0;
+    for (let i = 0; i < store.count && spots.length; i += step) {
+      if (!store.expand(i, buf)) continue;
+      const t = store.times[i]!;
+      let sum = 0;
+      for (const s of spots) {
+        vals.length = 0;
+        for (const c of s.cells) vals.push(decodeDepth(buf[c * 4]!));
+        vals.sort((a, b) => a - b);
+        const d = vals[Math.floor(0.75 * (vals.length - 1))]!;
+        if (d >= 0.3 && t < s.arrive) s.arrive = t;
+        s.depth = Math.max(s.depth, d);
+        sum += d;
+      }
+      if (sum > bestSum) {
+        bestSum = sum;
+        tPeak = t;
+      }
     }
-    const [ax, ay] = geo.lngLatToLocal(AYAZAGA);
-    let best = -1;
-    let bestC = 0;
-    const m = 12;
-    for (const radius of [2600, Infinity]) {
-      if (best > 0) break;
-      for (let j = m; j < ny - m; j++)
-        for (let i = m; i < nx - m; i++) {
-          const [x, y] = geo.cellToLocal(i, j);
-          if (Math.hypot(x - ax, y - ay) > radius) continue;
-        let s = 0;
-        for (let dj = -2; dj <= 2; dj++) for (let di = -2; di <= 2; di++) s += score[(j + dj) * nx + i + di]!;
-        if (s > best) {
-          best = s;
-            bestC = j * nx + i;
-          }
-        }
-    }
-    if (best <= 0) bestC = Math.floor(ny / 2) * nx + Math.floor(nx / 2);
-    const peakAt: LngLat = geo.cellToLngLat(bestC % nx, Math.floor(bestC / nx));
-    const tPeak = store.times[iPeak]!;
-    const tStart = Math.max(store.times[0]!, (first >= 0 ? store.times[first]! : tPeak - 240) - 45);
-    this.tour = buildTour({ center: geo.center, tStart, tPeak, peakAt, narrow: this.narrow });
+    // only spots the model actually floods (unless that leaves too few to make a tour)
+    const wet = spots.filter((s) => s.depth >= 0.3);
+    const fmt = (d: number) => d.toLocaleString("tr-TR", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+    const stops = (wet.length >= 3 ? wet : spots).map((s) => ({
+      at: s.at,
+      title: s.title,
+      sub: s.depth >= 0.3 ? `${s.report} · Modelde sokakta ${fmt(s.depth)} m su` : s.report,
+      arrive: s.arrive,
+    }));
+    const firstArrive = Math.min(...stops.map((s) => s.arrive));
+    const onset = Number.isFinite(firstArrive) ? firstArrive : first >= 0 ? store.times[first]! : tPeak - 240;
+    const tStart = Math.min(Math.max(tFirst, onset - 45), tPeak);
+    const tEnd = Math.min(tLast, tPeak + 90);
+    const calm = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    this.tour = buildTour({ center: geo.center, stops, tStart, tPeak, tEnd, narrow: this.narrow, calm });
     this.set({ tourReady: true, tourMarks: [tStart, tPeak] });
     this.placeDebris();
     if (this.state.mode === "tur") this.startTour();
@@ -419,6 +451,7 @@ export class FloodEngine {
     this.debris?.update(dt * moving, this.visTime, t);
     this.spray?.update(dt, st.playing ? 1 : 0.35);
     this.lastT = t;
+    this.places?.setTime(t);
     map.triggerRepaint();
 
     this.fpsAcc.n++;

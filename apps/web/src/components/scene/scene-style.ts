@@ -1,27 +1,55 @@
-import type { ExpressionSpecification, Map as MlMap, StyleSpecification } from "maplibre-gl";
+import type {
+  ExpressionSpecification,
+  FilterSpecification,
+  Map as MlMap,
+  SourceSpecification,
+  StyleSpecification,
+} from "maplibre-gl";
+import { placeLayers } from "../places";
 import { TERRARIUM_URL } from "./terrain";
 
 /** Night-quiet base for the cinematic scene: terrain, water, a hint of roads. The flood carries the colour. */
 export const FOG = "#0b1216";
 
 /**
+ * Where the "basemap-buildings" extrusions come from. Default: OpenFreeMap's OSM buildings (source "omt").
+ * A page can swap in another vector source (`spec` is then added to the style's sources by sceneStyle).
+ */
+export type BuildingSource = {
+  source: string;
+  spec?: SourceSpecification;
+  sourceLayer: string;
+  height: ExpressionSpecification;
+  base: ExpressionSpecification;
+  filter?: FilterSpecification;
+};
+
+const OMT_BUILDINGS: BuildingSource = {
+  source: "omt",
+  sourceLayer: "building",
+  height: ["coalesce", ["get", "render_height"], 9],
+  base: ["coalesce", ["get", "render_min_height"], 0],
+};
+
+/**
  * Every OSM building in the country as a 3D extrusion (OpenFreeMap). Where we draw our own analysed buildings,
  * the basemap copies are hidden by OSM id (see hideOwnBuildings), so no building is drawn twice.
  */
-export function basemapBuildings(color = "#1d262b", night = false, fadeOutAt?: number): never {
+export function basemapBuildings(color = "#1d262b", night = false, fadeOutAt?: number, from: BuildingSource = OMT_BUILDINGS): never {
   return {
     id: "basemap-buildings",
     type: "fill-extrusion",
-    source: "omt",
-    "source-layer": "building",
+    source: from.source,
+    "source-layer": from.sourceLayer,
+    ...(from.filter ? { filter: from.filter } : {}),
     minzoom: 13,
     paint: {
       "fill-extrusion-color": color,
       // night: walls darken toward the ground (no window texture here: a fill-extrusion pattern also covers
       // roofs, which read as a checkerboard; lit windows come from NightBuildingsLayer where it is used)
       ...(night ? { "fill-extrusion-vertical-gradient": true } : {}),
-      "fill-extrusion-height": ["coalesce", ["get", "render_height"], 9],
-      "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
+      "fill-extrusion-height": from.height,
+      "fill-extrusion-base": from.base,
       "fill-extrusion-opacity":
         fadeOutAt == null
           ? ["interpolate", ["linear"], ["zoom"], 13, 0, 14, 0.95]
@@ -44,8 +72,11 @@ export function hideOwnBuildings(map: MlMap, ids: Iterable<number>) {
   map.setFilter("basemap-buildings", ["match", osmId, labels, false, true] as unknown as ExpressionSpecification);
 }
 
-/** `buildingsFadeOutAt`: hand the buildings over to a custom layer from this zoom on (see basemapBuildings). */
-export function sceneStyle(buildingsFadeOutAt?: number): StyleSpecification {
+/**
+ * `buildingsFadeOutAt`: hand the buildings over to a custom layer from this zoom on (see basemapBuildings).
+ * `buildings`: extrude another building source than OpenFreeMap's (its `spec` is added to the sources).
+ */
+export function sceneStyle(buildingsFadeOutAt?: number, buildings: BuildingSource = OMT_BUILDINGS): StyleSpecification {
   const dem = { type: "raster-dem" as const, encoding: "terrarium" as const, tiles: [TERRARIUM_URL], tileSize: 256, maxzoom: 15 };
   const road = (classes: string[]) => ["match", ["get", "class"], classes, true, false] as never;
   return {
@@ -60,6 +91,7 @@ export function sceneStyle(buildingsFadeOutAt?: number): StyleSpecification {
       },
       terrain: { ...dem, attribution: "Mapzen Terrain" },
       hills: dem,
+      ...(buildings.spec ? { [buildings.source]: buildings.spec } : {}),
     },
     terrain: { source: "terrain", exaggeration: 1 },
     sky: {
@@ -142,7 +174,7 @@ export function sceneStyle(buildingsFadeOutAt?: number): StyleSpecification {
           "line-width": ["interpolate", ["exponential", 1.6], ["zoom"], 11, 0.6, 18, 6],
         },
       },
-      basemapBuildings("#222c32", true, buildingsFadeOutAt),
+      basemapBuildings("#222c32", true, buildingsFadeOutAt, buildings),
       {
         id: "place-label",
         type: "symbol",
@@ -158,6 +190,8 @@ export function sceneStyle(buildingsFadeOutAt?: number): StyleSpecification {
         },
         paint: { "text-color": "#7f8d93", "text-halo-color": "#0b1115", "text-halo-width": 1.4, "text-opacity": 0.85 },
       },
+      // hospitals, schools, stadiums, ... by name, above everything
+      ...placeLayers(),
     ],
   };
 }

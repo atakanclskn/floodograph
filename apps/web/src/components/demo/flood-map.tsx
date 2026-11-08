@@ -18,6 +18,8 @@ import { Water3DLayer } from "./water-3d";
 import { buildBaseStyle, CONTOUR_LAYERS } from "./map-style";
 import { hideOwnBuildings } from "@/components/scene/scene-style";
 import { CorridorTiles } from "@/lib/corridor-tiles";
+import { trackPitch } from "@/components/rain-overlay";
+import { FloodedPlaces, placeLayers } from "@/components/places";
 
 type GeoData = GeoJSONSourceSpecification["data"];
 type Feature = { type: "Feature"; id?: number; geometry: unknown; properties: BuildingProps & { ht?: Tier } };
@@ -161,6 +163,8 @@ type ViewState = {
   drawn?: boolean;
 };
 const VIEW = new WeakMap<MlMap, ViewState>();
+/** Flooded-place labels per map (fed by applyData, driven by the playhead). */
+const PLACES = new WeakMap<MlMap, FloodedPlaces>();
 
 /** The pilot's own (building-scored) corridors from the database. */
 function loadCorridors(repo: ReturnType<typeof floodRepository>, cityId: string) {
@@ -238,6 +242,7 @@ function applyData(map: MlMap, b: FC, c: { features: unknown[] }, onStats: (s: M
   const fwSorted = Float64Array.from(fws).sort();
   (map.getSource("buildings") as GeoJSONSource).setData(b as GeoData);
   hideOwnBuildings(map, b.features.map((f) => f.properties.id));
+  PLACES.get(map)?.setBuildings(b.features as unknown as Parameters<FloodedPlaces["setBuildings"]>[0]);
   const stats: MapStats = { tiers, corridors: { derived: 0, buried_osm: 0, open: 0 }, fwSorted, total: b.features.length };
   const prev = VIEW.get(map);
   VIEW.set(map, { boxes: [], last: stats, pilot: c.features, tiles: prev?.tiles ?? new CorridorTiles(), emit: onStats });
@@ -300,6 +305,7 @@ export function FloodMap(props: FloodMapProps) {
         fadeDuration: reduce ? 0 : 300,
       });
       mapRef.current = map;
+      trackPitch(map);
       (window as unknown as { __floodMap?: MlMap }).__floodMap = map; // debugging handle
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
       if (!narrow) map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
@@ -360,6 +366,9 @@ export function FloodMap(props: FloodMapProps) {
             },
           });
         }
+        // names of hospitals, schools, stadiums, ... above the buildings; flooded ones get their own orange label
+        for (const l of placeLayers()) map.addLayer(l);
+        PLACES.set(map, new FloodedPlaces(map));
         map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.32, position: [1.3, 210, 35] });
 
         map.on("click", ["buildings", "alarm", "alarm-blink"], (e) => {
@@ -494,6 +503,7 @@ export function FloodMap(props: FloodMapProps) {
     if (!mapReady || !map) return;
     const sel = selectedId;
     if (mode === "static") {
+      PLACES.get(map)?.setTime(-1);
       map.setFilter("alarm", NONE);
       map.setFilter("alarm-blink", NONE);
       map.setFilter("buildings", tierFilter(activeTiers));
@@ -503,6 +513,7 @@ export function FloodMap(props: FloodMapProps) {
     }
     let applied = "";
     const apply = (t: number) => {
+      PLACES.get(map)?.setTime(t);
       const fws = fwRef.current;
       const n = fws ? countAtMost(fws, t) : 0; // reached by now
       const m = fws ? countAtMost(fws, t - BLINK_MIN) : 0; // reached long enough ago to stop blinking

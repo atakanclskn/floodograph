@@ -5,9 +5,11 @@ import { AnimatePresence, motion } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, StyleSpecification } from "maplibre-gl";
 import type { GridFrame, GridMeta, Scenario } from "@floodograph/core";
-import { RainOverlay } from "@/components/rain-overlay";
+import { RainOverlay, trackPitch } from "@/components/rain-overlay";
 import { sceneStyle } from "@/components/scene/scene-style";
 import { NIGHT_MIN_ZOOM, NightBuildingsLayer } from "./night-buildings";
+import { OVERTURE_BUILDINGS, registerPmtiles } from "./overture-buildings";
+import { StormCloudsLayer } from "./storm-clouds";
 import { SiteNav } from "@/components/site-nav";
 import { Water3DLayer } from "@/components/demo/water-3d";
 import { floodRepository } from "@/lib/repository";
@@ -49,9 +51,12 @@ type Region = {
 /** At most this many regions drawn at once (each is its own 3D water mesh). */
 const MAX_REGIONS = 10;
 
-/** Flat night base (no 3D terrain: the water sits on z = 0) with every OSM building lit at night. */
+/**
+ * Flat night base (no 3D terrain: the water sits on z = 0) with every building lit at night: Overture's buildings
+ * (OSM + ML footprints, with heights / floors where known) instead of OpenFreeMap's OSM-only ones.
+ */
 function cityStyle(): StyleSpecification {
-  const s = sceneStyle(NIGHT_MIN_ZOOM);
+  const s = sceneStyle(NIGHT_MIN_ZOOM, OVERTURE_BUILDINGS);
   delete (s as { terrain?: unknown }).terrain;
   return s;
 }
@@ -76,6 +81,7 @@ export function CityFlood() {
   const [stats, setStats] = useState({ wetHa: 0, urgent: 0, veryUrgent: 0 });
   const seen = useRef(new Map<string, number>()); // block key -> when it first became urgent (for the pulse)
   const [corr, setCorr] = useState<Record<CorridorKind, number>>({ derived: 0, buried_osm: 0, open: 0 });
+  const cloudsRef = useRef<StormCloudsLayer | null>(null);
   const city = CITIES[cityIdx]!;
 
   // map
@@ -83,7 +89,8 @@ export function CityFlood() {
     let map: MlMap | null = null;
     let disposed = false;
     (async () => {
-      const { Map, AttributionControl, NavigationControl, setWorkerUrl } = await import("maplibre-gl");
+      const { Map, AttributionControl, NavigationControl, setWorkerUrl, addProtocol } = await import("maplibre-gl");
+      await registerPmtiles(addProtocol); // the Overture buildings are a pmtiles:// source
       if (disposed || !container.current) return;
       setWorkerUrl(WORKER_URL);
       map = new Map({
@@ -97,13 +104,19 @@ export function CityFlood() {
         attributionControl: false,
       });
       mapRef.current = map;
+      trackPitch(map);
       (window as unknown as { __cityMap?: MlMap }).__cityMap = map;
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
       map.on("load", () => {
         if (!map) return;
-        // close up, the basemap's buildings are redrawn with lit windows on the walls (and plain roofs)
+        // close up, the buildings are redrawn with lit windows on the walls (and plain roofs)
         map.addLayer(new NightBuildingsLayer(), "place-label");
+        // seen from high up: the storm cell over the city (the screen rain takes over as you zoom in)
+        const clouds = new StormCloudsLayer(window.matchMedia("(max-width: 767px), (pointer: coarse)").matches);
+        cloudsRef.current = clouds;
+        clouds.set(CITIES[0]!.center, mmRef.current / MAX_MM);
+        map.addLayer(clouds, "place-label");
         // stream corridors of every city, loaded tile by tile only where the screen is
         map.addSource("corridors", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         for (const kind of CORRIDOR_ORDER) {
@@ -268,7 +281,9 @@ export function CityFlood() {
   /** Load and draw only the regions on screen; regions that leave the screen lose their 3D layer. */
   function syncRegions() {
     const map = mapRef.current;
-    if (!map || !map.isStyleLoaded()) return;
+    // not isStyleLoaded(): that is false whenever any tile is still streaming, which on a moving map is most of
+    // the time, and the regions would never be added. The layers we insert before only need to exist.
+    if (!map || !map.getLayer("basemap-buildings")) return;
     const b = map.getBounds();
     const padX = (b.getEast() - b.getWest()) * 0.1;
     const padY = (b.getNorth() - b.getSouth()) * 0.1;
@@ -365,6 +380,10 @@ export function CityFlood() {
     (map.getSource("urgent") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
     setStats({ wetHa, urgent: features.length, veryUrgent });
   }
+
+  useEffect(() => {
+    cloudsRef.current?.set(city.center, mm / MAX_MM);
+  }, [city, mm]);
 
   useEffect(() => {
     mmRef.current = mm;

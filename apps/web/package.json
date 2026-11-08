@@ -19,6 +19,7 @@
     "maplibre-gl": "latest",
     "motion": "latest",
     "next": "16.4.5",
+    "pmtiles": "^4.5.0",
     "react": "latest",
     "react-dom": "latest",
     "recharts": "latest",

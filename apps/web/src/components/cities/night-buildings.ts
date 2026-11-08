@@ -1,10 +1,12 @@
 import { MercatorCoordinate, type CustomLayerInterface, type CustomRenderMethodInput, type Map as MlMap } from "maplibre-gl";
 import * as THREE from "three";
+import { OVERTURE_FILTER, OVERTURE_LAYER, OVERTURE_SOURCE, overtureHeight, overtureMinHeight } from "./overture-buildings";
 
 /**
- * The basemap's OSM buildings redrawn like the pilot's: windows in rows on the walls, a share of them lit warm,
- * flat dark roofs (a MapLibre fill-extrusion pattern would paint roofs too). Only the buildings of the tiles on
- * screen are built, and the mesh is rebuilt when the view settles. Flat map (z = 0), as on /sehirler.
+ * Overture's buildings (OSM + ML footprints, see overture-buildings.ts) drawn like the pilot's: windows in rows on
+ * the walls, a share of them lit warm, flat dark roofs (a MapLibre fill-extrusion pattern would paint roofs too).
+ * Only the buildings of the tiles on screen are built, and the mesh is rebuilt when the view settles. Flat map
+ * (z = 0), as on /sehirler.
  */
 const vertex = /* glsl */ `
   attribute vec3 aInfo; // building seed, ground z, 1 = roof vertex
@@ -53,7 +55,17 @@ const fragment = /* glsl */ `
 
 type Ring = [number, number][];
 
-/** From this zoom the layer draws the buildings (the basemap's plain extrusions fade out, see sceneStyle). */
+/** Signed area of a ring in local metres (shoelace). */
+function ringArea(ring: Ring) {
+  let a = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) a += (ring[j]![0] - ring[i]![0]) * (ring[j]![1] + ring[i]![1]);
+  return a / 2;
+}
+
+/**
+ * From this zoom the layer draws the buildings (the plain extrusions fade out, see sceneStyle). Overture's tiles
+ * end at z14, which is also the first zoom whose tiles carry heights and floor counts.
+ */
 export const NIGHT_MIN_ZOOM = 14;
 
 export class NightBuildingsLayer implements CustomLayerInterface {
@@ -91,7 +103,7 @@ export class NightBuildingsLayer implements CustomLayerInterface {
   }
 
   private onSource = (e: { sourceId?: string; isSourceLoaded?: boolean; tile?: unknown }) => {
-    if (e.sourceId === "omt" && e.tile) this.schedule();
+    if (e.sourceId === OVERTURE_SOURCE && e.tile) this.schedule();
   };
 
   private schedule = () => {
@@ -108,11 +120,12 @@ export class NightBuildingsLayer implements CustomLayerInterface {
       return;
     }
     // tiles still arriving: try again shortly (the water layer repaints continuously, so "idle" may never fire)
-    if (!map.isSourceLoaded("omt")) {
+    if (!map.getSource(OVERTURE_SOURCE)) return;
+    if (!map.isSourceLoaded(OVERTURE_SOURCE)) {
       this.schedule();
       if (this.mesh?.geometry.attributes.position?.count) return;
     }
-    const feats = map.querySourceFeatures("omt", { sourceLayer: "building" });
+    const feats = map.querySourceFeatures(OVERTURE_SOURCE, { sourceLayer: OVERTURE_LAYER, filter: OVERTURE_FILTER });
     const c = map.getCenter();
     const key = `${feats.length}|${c.lng.toFixed(3)}|${c.lat.toFixed(3)}`;
     if (key === this.lastKey && this.mesh) {
@@ -133,31 +146,40 @@ export class NightBuildingsLayer implements CustomLayerInterface {
     for (const f of feats) {
       const g = f.geometry;
       if (g.type !== "Polygon" && g.type !== "MultiPolygon") continue;
-      const h = Number(f.properties?.render_height ?? 9) || 9;
-      const minH = Number(f.properties?.render_min_height ?? 0) || 0;
-      if (h <= minH) continue;
+      const id = Number(f.id ?? 0);
+      const minH = overtureMinHeight(f.properties);
       const polys = (g.type === "Polygon" ? [g.coordinates] : g.coordinates) as number[][][][];
-      const seed = ((Number(f.id ?? 0) % 997) + 997) % 997 / 997;
+      // ids are 64-bit: scale down before the modulo (see defaultFloors)
+      const seed = (Math.floor(Math.abs(id) / 1e6) % 997) / 997;
       for (const poly of polys) {
         const outer = poly[0];
         if (!outer || outer.length < 4) continue;
         // the same building piece arrives once per overlapping tile: draw it once
-        const k = `${outer[0]![0]!.toFixed(6)},${outer[0]![1]!.toFixed(6)},${outer.length},${h}`;
+        const k = `${id}|${outer[0]![0]!.toFixed(6)},${outer[0]![1]!.toFixed(6)},${outer.length}`;
         if (seen.has(k)) continue;
         seen.add(k);
-        const ring: Ring = outer.slice(0, -1).map(([lng, lat]) => toLocal(lng!, lat!));
+        // outer ring, then courtyards (holes); the closing vertex of each ring is dropped
+        const rings: Ring[] = [];
+        for (const r of poly) if (r.length >= 4) rings.push(r.slice(0, -1).map(([lng, lat]) => toLocal(lng!, lat!)));
+        const h = overtureHeight(f.properties, id, Math.abs(ringArea(rings[0]!)));
+        if (h <= minH) continue;
         const start = pos.length / 3;
-        for (const [x, y] of ring) {
-          pos.push(x, y, minH, x, y, h);
-          info.push(seed, minH, 0, seed, minH, 1);
+        for (const ring of rings) {
+          const first = pos.length / 3;
+          for (const [x, y] of ring) {
+            pos.push(x, y, minH, x, y, h);
+            info.push(seed, minH, 0, seed, minH, 1);
+          }
+          const n = ring.length;
+          for (let i = 0; i < n; i++) {
+            const a = first + i * 2;
+            const b = first + ((i + 1) % n) * 2;
+            idx.push(a, b, b + 1, a, b + 1, a + 1);
+          }
         }
-        const n = ring.length;
-        for (let i = 0; i < n; i++) {
-          const a = start + i * 2;
-          const b = start + ((i + 1) % n) * 2;
-          idx.push(a, b, b + 1, a, b + 1, a + 1);
-        }
-        const tris = THREE.ShapeUtils.triangulateShape(ring.map(([x, y]) => new THREE.Vector2(x, y)), []);
+        // roof: triangle indices run over the rings in the order pushed above
+        const v2 = (ring: Ring) => ring.map(([x, y]) => new THREE.Vector2(x, y));
+        const tris = THREE.ShapeUtils.triangulateShape(v2(rings[0]!), rings.slice(1).map(v2));
         for (const [p, q, r] of tris) idx.push(start + p! * 2 + 1, start + q! * 2 + 1, start + r! * 2 + 1);
       }
     }
