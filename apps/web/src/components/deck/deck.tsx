@@ -352,7 +352,7 @@ const SLIDES: Slide[] = [
           id={VIDEO_AYAZAGA}
           title="14 Ekim, Ayazağa: Habertürk TV görüntüsü"
           caption="Habertürk TV · 14 Ekim, Ayazağa"
-          extra="&modestbranding=1"
+          extra={`&modestbranding=1&loop=1&playlist=${VIDEO_AYAZAGA}`}
         />
       </div>
     ),
