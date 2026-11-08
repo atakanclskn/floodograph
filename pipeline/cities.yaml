@@ -47,7 +47,7 @@ ankara-kent:
   hydro_buffer_km: 1
   res_m: 50
 
-# City centres for /sehirler ("what if this rain fell here?"): ~20 km2 each, run like the pilot (20 m grid,
+# City centres for /sehirler (İstanbul, İzmir) ("what if this rain fell here?"): ~20 km2 each, run like the pilot (20 m grid,
 # buildings as walls, culverts) for a ladder of rain totals.
 istanbul-merkez:
   name: İstanbul · Şişli-Kağıthane-Beşiktaş
@@ -63,13 +63,5 @@ izmir-merkez:
   # Meles Çayı mouth, Alsancak, Konak
   bbox: [27.125, 38.415, 27.182, 38.455]
   rain_point: [38.435, 27.15]
-  hydro_buffer_km: 3
-  res_m: 20
-ankara-merkez:
-  name: Ankara · Kızılay-Ulus-Sıhhiye
-  epsg: 32636
-  # buried İncesu Deresi under Kızılay / Sıhhiye, Ulus
-  bbox: [32.835, 39.905, 32.893, 39.945]
-  rain_point: [39.925, 32.86]
   hydro_buffer_km: 3
   res_m: 20
