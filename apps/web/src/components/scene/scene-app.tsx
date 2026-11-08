@@ -1,11 +1,14 @@
 "use client";
 
-import Link from "next/link";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { AnimatePresence, animate, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { EngineState, FloodEngine, Mode } from "./engine";
 import { Timeline } from "./timeline";
+import { SiteNav } from "@/components/site-nav";
+import { RainOverlay, rainIntensityAt } from "@/components/rain-overlay";
+import { floodRepository } from "@/lib/repository";
+import { SCENARIO_ID } from "./data";
 
 const spring = { type: "spring", stiffness: 420, damping: 34, mass: 0.8 } as const;
 const RATES = [0.5, 1, 2, 4] as const;
@@ -189,6 +192,14 @@ export function SceneApp() {
   const [attempt, setAttempt] = useState(0);
   const [engine, s] = useEngine(container, attempt);
   const [noteOpen, setNoteOpen] = useState(false);
+  // the 14 Oct hourly rain, for the rain overlay's strength at the playhead
+  const rainRef = useRef<{ tMin: number; mm: number }[]>([]);
+  useEffect(() => {
+    floodRepository()
+      .rainSeries(SCENARIO_ID)
+      .then((r) => (rainRef.current = r))
+      .catch(() => {});
+  }, []);
   const c = clock(s.t);
 
   const setMode = useCallback(
@@ -226,27 +237,20 @@ export function SceneApp() {
         <div ref={container} className="h-full w-full" aria-label="Sel sahnesi, 3B harita" role="application" />
       </div>
 
+      <RainOverlay intensity={() => (engine ? rainIntensityAt(rainRef.current, engine.state.t) : 0.3)} />
       {/* soft vignette keeps the glass legible over bright water */}
       <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_50%_45%,transparent_55%,rgb(5_8_10/0.55)_100%)]" />
 
       {/* top bar */}
       <header className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
+        <div className="flex flex-col items-start gap-2">
+        <SiteNav />
         <motion.div
           initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="glass pointer-events-auto flex items-center gap-3 rounded-2xl py-2 pl-2 pr-4"
+          className="glass pointer-events-auto hidden items-center gap-3 rounded-2xl py-2 pl-3 pr-4 md:flex"
         >
-          <Link
-            href="/demo"
-            transitionTypes={["nav-back"]}
-            aria-label="Analiz haritasına dön"
-            className="inline-flex size-10 items-center justify-center rounded-xl transition-colors duration-150 hover:bg-white/10 active:scale-95"
-          >
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 8H3M7 4L3 8l4 4" />
-            </svg>
-          </Link>
           <span aria-hidden="true" className="relative flex size-7 items-center justify-center rounded-[9px] bg-ember/15 ring-1 ring-ember/35">
             <span className="size-2 rounded-full bg-ember shadow-[0_0_12px_2px_rgb(255_90_43/0.6)]" />
           </span>
@@ -257,6 +261,7 @@ export function SceneApp() {
             <span className="text-xs text-fg-3">14 Ekim 2026 selinin 2B sığ su modeli · Sarıyer–Ayazağa</span>
           </div>
         </motion.div>
+        </div>
 
         <div className="pointer-events-auto relative">
           <button

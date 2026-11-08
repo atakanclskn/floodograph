@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { AnimatePresence, motion } from "motion/react";
 import { TIER_LABEL, type BuildingProps, type CriticalFacility, type Tier } from "@floodograph/core";
@@ -15,6 +14,8 @@ import { ImpactCard, LiveCounters, WaterLegend } from "./scenario-panel";
 import { Timeline, type TimelineMarker } from "./timeline";
 import { usePlaybackLoop } from "./use-playback-loop";
 import { useScenario, type ScenarioState } from "./use-scenario";
+import { SiteNav } from "@/components/site-nav";
+import { RainOverlay, rainIntensityAt } from "@/components/rain-overlay";
 
 const spring = { type: "spring", stiffness: 420, damping: 34, mass: 0.8 } as const;
 const fmt = (n: number) => n.toLocaleString("tr-TR");
@@ -417,6 +418,13 @@ export function DemoApp() {
       className="relative h-dvh w-full overflow-hidden bg-ink"
       style={{ "--map-ctrl-bottom": `${ctrlBottom}px` } as React.CSSProperties}
     >
+      <RainOverlay
+        intensity={() => {
+          const p = usePlayback.getState();
+          // replay: the hour's real 14 Oct rain; static analysis: a steady light rain for atmosphere
+          return p.mode === "scenario" && ready ? rainIntensityAt(ready.rain, p.t) : 0.25;
+        }}
+      />
       <FloodMap
         cityId="istanbul"
         mode={mode}
@@ -435,19 +443,8 @@ export function DemoApp() {
 
       {/* top bar */}
       <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2 sm:inset-x-4 sm:top-4">
-        <header className="glass fg-rise pointer-events-auto flex items-center gap-1.5 rounded-2xl p-1.5">
-          <Link
-            href="/"
-            transitionTypes={["nav-back"]}
-            aria-label="Ana sayfaya dön"
-            className="inline-flex size-11 items-center justify-center rounded-xl transition-colors duration-150 hover:bg-white/10 active:scale-95"
-          >
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 8H3M7 4L3 8l4 4" />
-            </svg>
-          </Link>
-          <span className="pr-2 font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
-          <span className="hidden border-l border-line px-2.5 py-1.5 font-mono text-xs text-fg-3 sm:inline">İstanbul · Sarıyer</span>
+        <header className="fg-rise">
+          <SiteNav />
         </header>
         <div
           className="glass fg-rise pointer-events-auto flex gap-1 rounded-2xl p-1.5"
@@ -464,23 +461,6 @@ export function DemoApp() {
           <Toggle pressed={tilted} onClick={() => setTilted((v) => !v)}>
             3B
           </Toggle>
-          <Link
-            href="/sehirler"
-            transitionTypes={["nav-forward"]}
-            className="ml-1 inline-flex min-h-11 items-center rounded-xl px-3.5 text-sm font-semibold transition-colors duration-150 hover:bg-white/10"
-          >
-            Şehirler
-          </Link>
-          <Link
-            href="/sinema"
-            transitionTypes={["nav-forward"]}
-            className="btn-ember ml-1 inline-flex min-h-11 items-center gap-2 rounded-xl bg-ember px-3.5 text-sm font-semibold text-ink active:scale-95"
-          >
-            <svg aria-hidden="true" width="15" height="15" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
-            </svg>
-            Sinema
-          </Link>
         </div>
       </div>
 

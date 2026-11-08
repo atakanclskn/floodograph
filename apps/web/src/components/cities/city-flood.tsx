@@ -1,35 +1,54 @@
 "use client";
 
 import "maplibre-gl/dist/maplibre-gl.css";
-import Link from "next/link";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { Map as MlMap, StyleSpecification } from "maplibre-gl";
-import type { RainPoint, Scenario } from "@floodograph/core";
-import { sceneStyle } from "@/components/scene/scene-style";
+import type { GeoJSONSource, Map as MlMap, StyleSpecification } from "maplibre-gl";
+import type { GridFrame, GridMeta, Scenario } from "@floodograph/core";
+import { RainOverlay } from "@/components/rain-overlay";
+import { installWindowPattern, sceneStyle } from "@/components/scene/scene-style";
+import { SiteNav } from "@/components/site-nav";
 import { Water3DLayer } from "@/components/demo/water-3d";
 import { floodRepository } from "@/lib/repository";
-import { clockAt, fmtInt, playbackStart } from "@/lib/scenario";
+import { fmtInt } from "@/lib/scenario";
 import { FrameStore } from "@/lib/water-frames";
 
 const WORKER_URL = "/vendor/maplibre-gl-worker.mjs";
-/** Simulation minutes per real second at x1. */
-const RATE = 20;
 
-type City = { id: string; name: string; sub: string; center: [number, number]; zoom: number };
+type City = { id: string; name: string; center: [number, number]; zoom: number };
 const CITIES: City[] = [
-  { id: "istanbul-kent", name: "İstanbul", sub: "14 Ekim'de yaşanan yağış", center: [28.98, 41.06], zoom: 10.4 },
-  { id: "izmir-kent", name: "İzmir", sub: "Aynı yağış İzmir'e düşseydi", center: [27.14, 38.43], zoom: 11.2 },
-  { id: "ankara-kent", name: "Ankara", sub: "Aynı yağış Ankara'ya düşseydi", center: [32.82, 39.93], zoom: 11.1 },
+  { id: "istanbul-kent", name: "İstanbul", center: [28.98, 41.06], zoom: 10.4 },
+  { id: "izmir-kent", name: "İzmir", center: [27.14, 38.43], zoom: 11.2 },
+  { id: "ankara-kent", name: "Ankara", center: [32.82, 39.93], zoom: 11.1 },
 ];
+const MAX_MM = 300;
+const PRESETS = [
+  { mm: 40, label: "Kuvvetli yağmur" },
+  { mm: 100, label: "Sağanak" },
+  { mm: 188, label: "14 Ekim (Sarıyer)" },
+  { mm: 280, label: "Aşırı" },
+];
+/** Urgent spots: blocks of 4 x 4 cells (200 m) whose deepest water passes these depths. */
+const BLOCK = 4;
+const DEEP_M = 1.0;
+const VERY_DEEP_M = 1.5;
+const PULSE_MS = 2600;
 
-type Loaded = { scenario: Scenario; rain: RainPoint[]; frames: FrameStore };
+type Loaded = { scenario: Scenario; frames: FrameStore };
 
-/** Flat night base (no 3D terrain: the water sits on z = 0) with every OSM building extruded. */
+/** Flat night base (no 3D terrain: the water sits on z = 0) with every OSM building lit at night. */
 function cityStyle(): StyleSpecification {
   const s = sceneStyle();
   delete (s as { terrain?: unknown }).terrain;
   return s;
+}
+
+/** lon/lat of a fractional grid position, from the grid's corner quad (NW, NE, SE, SW). */
+function gridToLngLat(grid: GridMeta, s: number, t: number): [number, number] {
+  const [nw, ne, se, sw] = grid.corners_lonlat;
+  const top = [nw[0] + (ne[0] - nw[0]) * s, nw[1] + (ne[1] - nw[1]) * s];
+  const bot = [sw[0] + (se[0] - sw[0]) * s, sw[1] + (se[1] - sw[1]) * s];
+  return [top[0]! + (bot[0]! - top[0]!) * t, top[1]! + (bot[1]! - top[1]!) * t];
 }
 
 export function CityFlood() {
@@ -40,10 +59,11 @@ export function CityFlood() {
   const [cityIdx, setCityIdx] = useState(0);
   const [data, setData] = useState<Loaded | null>(null);
   const [status, setStatus] = useState<"loading" | "ready" | "missing" | "error">("loading");
-  const [t, setT] = useState(0);
-  const [playing, setPlaying] = useState(false);
-  const [wetHa, setWetHa] = useState(0);
-  const tRef = useRef(0);
+  const [mm, setMm] = useState(100);
+  const mmRef = useRef(mm);
+  const [stats, setStats] = useState({ wetHa: 0, urgent: 0, veryUrgent: 0 });
+  const seen = useRef(new Map<string, number>()); // block key -> when it first became urgent (for the pulse)
+  const zero = useRef<GridFrame | null>(null);
   const city = CITIES[cityIdx]!;
 
   // map
@@ -65,10 +85,39 @@ export function CityFlood() {
         attributionControl: false,
       });
       mapRef.current = map;
+      installWindowPattern(map);
       (window as unknown as { __cityMap?: MlMap }).__cityMap = map;
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
-      map.on("load", () => setMapReady(true));
+      map.on("load", () => {
+        if (!map) return;
+        map.addSource("urgent", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        map.addLayer({
+          id: "urgent-glow",
+          type: "circle",
+          source: "urgent",
+          paint: {
+            "circle-color": ["case", [">=", ["get", "d"], VERY_DEEP_M], "#ff5a2b", "#ffc23a"],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 2.5, 12, 7, 15, 18],
+            "circle-blur": 0.6,
+            "circle-opacity": 0.55,
+          },
+        });
+        map.addLayer({
+          id: "urgent-pulse",
+          type: "circle",
+          source: "urgent",
+          filter: ["==", ["get", "fresh"], 1],
+          paint: {
+            "circle-color": ["case", [">=", ["get", "d"], VERY_DEEP_M], "#ff5a2b", "#ffc23a"],
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 9, 5, 12, 14, 15, 34],
+            "circle-opacity": 0.9,
+            "circle-stroke-width": 1.5,
+            "circle-stroke-color": "#fff3e0",
+          },
+        });
+        setMapReady(true);
+      });
     })();
     return () => {
       disposed = true;
@@ -77,30 +126,30 @@ export function CityFlood() {
     };
   }, []);
 
-  // scenario of the selected city
+  // rain ladder of the selected city: frames keyed by rain total (mm), not by time
   useEffect(() => {
     let cancelled = false;
     let frames: FrameStore | null = null;
     (async () => {
       setStatus("loading");
       setData(null);
+      seen.current.clear();
       try {
         const repo = floodRepository();
         const list = await repo.listScenarios(city.id);
-        const scenario = list.find((s) => s.id === `${city.id}-2026-10-14`);
+        const scenario = list.find((s) => s.id === `${city.id}-yagis`);
         if (!scenario?.grid) {
           if (!cancelled) setStatus("missing");
           return;
         }
-        const [rain, refs] = await Promise.all([repo.rainSeries(scenario.id), repo.gridFrames(scenario.id)]);
+        const refs = await repo.gridFrames(scenario.id);
         if (cancelled) return;
         frames = new FrameStore(repo, scenario.id, refs, scenario.grid);
-        const start = playbackStart(rain);
-        tRef.current = start;
-        setT(start);
-        setData({ scenario, rain, frames });
+        const n = scenario.grid.nx * scenario.grid.ny;
+        zero.current = { tMin: 0, nx: scenario.grid.nx, ny: scenario.grid.ny, depth: new Float32Array(n), u: new Float32Array(n), v: new Float32Array(n) };
+        frames.want(mmRef.current, frames.size, 0); // the ladder is short: fetch every level
+        setData({ scenario, frames });
         setStatus("ready");
-        setPlaying(true);
       } catch {
         if (!cancelled) setStatus("error");
       }
@@ -118,7 +167,7 @@ export function CityFlood() {
     map.flyTo({ center: city.center, zoom: city.zoom, pitch: 55, bearing: -20, duration: 2600, essential: true });
   }, [mapReady, city]);
 
-  // water layer for the loaded scenario
+  // 3D water layer
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || !data) return;
@@ -132,71 +181,99 @@ export function CityFlood() {
     };
   }, [mapReady, data]);
 
-  // draw the frame pair around t
+  /** Show the water for `total` mm of rain: blend the two nearest levels of the ladder. */
   const draw = useCallback(
-    (tt: number) => {
+    (total: number) => {
       const water = waterRef.current;
-      if (!water || !data) return;
+      const map = mapRef.current;
+      if (!water || !map || !data || !zero.current) return;
       const fs = data.frames;
-      fs.want(tt, 6, 1);
-      const br = fs.bracket(tt);
-      if (!br) return;
-      let a = fs.get(br.a);
-      let b = fs.get(br.b);
-      let alpha = br.alpha;
-      if (!a) {
-        a = fs.nearestLoaded(tt);
-        b = a;
-        alpha = 0;
-      } else if (!b) {
-        b = a;
-        alpha = 0;
+      const first = fs.times[0] ?? 0;
+      let a: GridFrame | undefined;
+      let b: GridFrame | undefined;
+      let alpha = 0;
+      if (total <= first) {
+        a = zero.current;
+        b = fs.get(first);
+        alpha = first > 0 ? total / first : 1;
+      } else {
+        const br = fs.bracket(total);
+        if (!br) return;
+        a = fs.get(br.a);
+        b = fs.get(br.b);
+        alpha = br.alpha;
       }
-      if (!a || !b) return;
+      if (!a || !b) return; // still streaming
       water.setFrames(a, b, alpha);
-      const cellHa = (data.scenario.grid!.res_m ** 2) / 1e4;
+
+      // statistics and urgent blocks from the blended depth
+      const grid = data.scenario.grid!;
+      const { nx, ny } = grid;
+      const cellHa = grid.res_m ** 2 / 1e4;
+      const da = a.depth;
+      const db = b.depth;
       let wet = 0;
-      for (let i = 0, n = a.depth.length; i < n; i++) if (a.depth[i]! * (1 - alpha) + b.depth[i]! * alpha > 0.1) wet++;
-      setWetHa(wet * cellHa);
+      for (let i = 0; i < da.length; i++) if (da[i]! * (1 - alpha) + db[i]! * alpha > 0.1) wet++;
+      const now = performance.now();
+      const features: { type: "Feature"; geometry: { type: "Point"; coordinates: [number, number] }; properties: { d: number; fresh: number } }[] = [];
+      let veryUrgent = 0;
+      const live = new Set<string>();
+      for (let bj = 0; bj < ny; bj += BLOCK)
+        for (let bi = 0; bi < nx; bi += BLOCK) {
+          let dmax = 0;
+          for (let j = bj; j < Math.min(ny, bj + BLOCK); j++)
+            for (let i = bi; i < Math.min(nx, bi + BLOCK); i++) {
+              const c = j * nx + i;
+              const d = da[c]! * (1 - alpha) + db[c]! * alpha;
+              if (d > dmax) dmax = d;
+            }
+          if (dmax < DEEP_M) continue;
+          const key = `${bi},${bj}`;
+          live.add(key);
+          if (!seen.current.has(key)) seen.current.set(key, now);
+          const fresh = now - seen.current.get(key)! < PULSE_MS ? 1 : 0;
+          if (dmax >= VERY_DEEP_M) veryUrgent++;
+          features.push({
+            type: "Feature",
+            geometry: { type: "Point", coordinates: gridToLngLat(grid, (bi + BLOCK / 2) / nx, (bj + BLOCK / 2) / ny) },
+            properties: { d: Math.round(dmax * 100) / 100, fresh },
+          });
+        }
+      // a block that dried out may pulse again when the rain is raised back
+      for (const k of [...seen.current.keys()]) if (!live.has(k)) seen.current.delete(k);
+      (map.getSource("urgent") as GeoJSONSource | undefined)?.setData({ type: "FeatureCollection", features });
+      setStats({ wetHa: wet * cellHa, urgent: features.length, veryUrgent });
     },
     [data],
   );
 
   useEffect(() => {
-    if (!data) return;
-    return data.frames.onLoad(() => draw(tRef.current));
-  }, [data, draw]);
-
-  // playback loop
+    mmRef.current = mm;
+    draw(mm);
+  }, [mm, draw]);
   useEffect(() => {
     if (!data) return;
-    const end = data.frames.times.at(-1) ?? data.scenario.durationMin;
+    return data.frames.onLoad(() => draw(mmRef.current));
+  }, [data, draw]);
+  // keep the pulse ticking: fresh flags expire after PULSE_MS
+  useEffect(() => {
+    if (!data) return;
+    const id = setInterval(() => draw(mmRef.current), 700);
+    return () => clearInterval(id);
+  }, [data, draw]);
+  // the pulse ring breathes
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map || window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
     let raf = 0;
-    let last = performance.now();
-    let acc = 0;
     const tick = (now: number) => {
       raf = requestAnimationFrame(tick);
-      const dt = Math.min((now - last) / 1000, 0.1);
-      last = now;
-      if (playing) {
-        const nt = Math.min(tRef.current + dt * RATE, end);
-        tRef.current = nt;
-        if (nt >= end) setPlaying(false);
-      }
-      acc += dt;
-      if (acc > 0.12) {
-        acc = 0;
-        setT(tRef.current);
-        draw(tRef.current);
-      }
+      const s = 0.5 + 0.5 * Math.sin((now / 1000) * Math.PI * 2 * 2.2);
+      if (map.getLayer("urgent-pulse")) map.setPaintProperty("urgent-pulse", "circle-opacity", 0.25 + 0.7 * s);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [data, playing, draw]);
-
-  const m = data?.scenario.metrics ?? {};
-  const end = data?.frames.times.at(-1) ?? 1800;
-  const clock = clockAt(data?.scenario.startTs, t);
+  }, [mapReady]);
 
   return (
     <div className="fixed inset-0 bg-ink">
@@ -204,16 +281,10 @@ export function CityFlood() {
       <div className="absolute inset-0">
         <div ref={container} className="h-full w-full" role="region" aria-label={`${city.name} sel haritası`} />
       </div>
+      <RainOverlay intensity={() => Math.sqrt(Math.min(1, mmRef.current / MAX_MM))} />
 
       <header className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
-        <div className="glass pointer-events-auto flex items-center gap-1.5 rounded-2xl p-1.5">
-          <Link href="/" aria-label="Ana sayfaya dön" className="inline-flex size-11 items-center justify-center rounded-xl hover:bg-white/10">
-            <svg aria-hidden="true" width="18" height="18" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M13 8H3M7 4L3 8l4 4" />
-            </svg>
-          </Link>
-          <span className="pr-3 font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
-        </div>
+        <SiteNav />
         <nav aria-label="Şehir" className="glass pointer-events-auto flex gap-1 rounded-2xl p-1.5">
           {CITIES.map((c, i) => (
             <button
@@ -226,9 +297,6 @@ export function CityFlood() {
               {c.name}
             </button>
           ))}
-          <Link href="/demo" className="min-h-11 content-center rounded-xl px-4 text-sm text-fg-3 hover:bg-white/10 hover:text-fg">
-            Sarıyer pilotu
-          </Link>
         </nav>
       </header>
 
@@ -239,81 +307,79 @@ export function CityFlood() {
           animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
           exit={{ opacity: 0, x: -10, filter: "blur(6px)" }}
           transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-          className="glass absolute left-3 top-24 z-10 flex w-[min(320px,calc(100vw-24px))] flex-col gap-4 rounded-[22px] p-5 sm:left-5"
+          className="glass absolute left-3 top-24 z-10 flex w-[min(300px,calc(100vw-24px))] flex-col gap-4 rounded-[22px] p-5 sm:left-5 max-sm:top-auto max-sm:bottom-40"
         >
           <div className="flex flex-col gap-1">
             <h1 className="font-display text-3xl font-semibold tracking-[-0.03em]">{city.name}</h1>
-            <p className="text-sm text-fg-2">{city.sub}</p>
+            <p className="text-sm text-fg-2">Bu yağış burada olsaydı?</p>
           </div>
           {status === "ready" ? (
             <dl className="grid grid-cols-2 gap-3">
-              <Stat label="Şu an su altında" value={`${fmtInt(wetHa)} ha`} accent />
-              <Stat label="Toplam ıslanan alan" value={`${fmtInt(m.ever_wet_ha ?? 0)} ha`} />
-              <Stat label="0,5 m'den derin" value={`${fmtInt(m.ever_deep_ha ?? 0)} ha`} />
-              <Stat label="Yağış" value={`${fmtInt(data?.scenario.totalMm ?? 0)} mm`} />
+              <Stat label="Su altında" value={`${fmtInt(stats.wetHa)} ha`} accent />
+              <Stat label="Acil nokta" value={fmtInt(stats.urgent)} ember />
+              <Stat label="1,5 m'den derin" value={fmtInt(stats.veryUrgent)} />
+              <Stat label="Yağış" value={`${fmtInt(mm)} mm`} />
             </dl>
           ) : (
             <p className="text-sm text-fg-3">
-              {status === "loading" ? "Senaryo yükleniyor…" : status === "missing" ? "Bu şehrin simülasyonu henüz yüklenmedi." : "Bağlantı kurulamadı."}
+              {status === "loading"
+                ? "Yükleniyor…"
+                : status === "missing"
+                  ? "Bu şehrin yağış senaryoları hesaplanıyor; birazdan burada."
+                  : "Bağlantı kurulamadı."}
             </p>
           )}
           <p className="text-xs leading-relaxed text-fg-3">
-            50 m ızgara, 2D sığ su modeli (GPU). Binalar bu ölçekte tek tek değil, yüzey pürüzlülüğü olarak hesapta. Bina
-            bazında analiz Sarıyer pilotunda (20 m).
+            Turuncu: suyun 1,5 m&rsquo;yi geçtiği, sarı: 1 m&rsquo;yi geçtiği 200 m&rsquo;lik bloklar. 50 m ızgara, 2D sığ su
+            modeli; yağış 14 Ekim&rsquo;in saatlik desenine göre dağıtılır. Bina bazında analiz Sarıyer pilotunda.
           </p>
         </motion.aside>
       </AnimatePresence>
 
-      <div className="glass absolute inset-x-3 bottom-3 z-10 mx-auto flex max-w-[820px] items-center gap-4 rounded-[22px] p-3 sm:bottom-5">
-        <button
-          type="button"
-          onClick={() => {
-            if (!playing && tRef.current >= end) tRef.current = data ? playbackStart(data.rain) : 0;
-            setPlaying((p) => !p);
-          }}
-          aria-label={playing ? "Duraklat" : "Oynat"}
-          className="btn-ember flex size-12 shrink-0 items-center justify-center rounded-full bg-ember text-ink"
-        >
-          {playing ? (
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <rect x="3.5" y="2.5" width="3" height="11" rx="1" />
-              <rect x="9.5" y="2.5" width="3" height="11" rx="1" />
-            </svg>
-          ) : (
-            <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-              <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
-            </svg>
-          )}
-        </button>
-        <div className="flex min-w-[96px] flex-col leading-tight">
-          <span className="font-mono text-2xl font-medium tabular-nums">{clock.time}</span>
-          <span className="text-xs text-fg-3">{clock.day}</span>
+      <div className="glass absolute inset-x-3 bottom-3 z-10 mx-auto flex max-w-[760px] flex-col gap-3 rounded-[22px] p-4 sm:bottom-5">
+        <div className="flex items-baseline justify-between gap-3">
+          <label htmlFor="yagis" className="text-sm font-semibold">
+            Günlük yağış
+          </label>
+          <span className="font-mono text-2xl font-medium tabular-nums">
+            {fmtInt(mm)}
+            <span className="ml-1 text-sm text-fg-3">mm</span>
+          </span>
         </div>
         <input
+          id="yagis"
           type="range"
-          className="fg-range min-w-0 flex-1"
+          className="fg-range w-full"
           min={0}
-          max={end}
-          step={1}
-          value={Math.round(t)}
-          aria-label="Zaman"
-          disabled={!data}
-          onChange={(e) => {
-            tRef.current = Number(e.target.value);
-            setT(tRef.current);
-            draw(tRef.current);
-          }}
+          max={MAX_MM}
+          step={5}
+          value={mm}
+          onChange={(e) => setMm(Number(e.target.value))}
+          aria-valuetext={`${mm} milimetre`}
         />
+        <div className="flex flex-wrap gap-1.5">
+          {PRESETS.map((p) => (
+            <button
+              key={p.mm}
+              type="button"
+              onClick={() => setMm(p.mm)}
+              aria-pressed={mm === p.mm}
+              className={`min-h-9 rounded-lg px-3 text-xs font-medium transition-colors duration-150 ${mm === p.mm ? "bg-white/15 text-fg" : "text-fg-3 hover:bg-white/10 hover:text-fg"}`}
+            >
+              {p.label} · {p.mm} mm
+            </button>
+          ))}
+        </div>
       </div>
     </div>
   );
 }
 
-function Stat({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function Stat({ label, value, accent = false, ember = false }: { label: string; value: string; accent?: boolean; ember?: boolean }) {
   return (
     <div className="flex flex-col gap-1">
       <dt className="text-[11px] uppercase tracking-[0.1em] text-fg-3">{label}</dt>
-      <dd className={`font-mono text-xl font-medium tabular-nums ${accent ? "text-water" : "text-fg"}`}>{value}</dd>
+      <dd className={`font-mono text-xl font-medium tabular-nums ${ember ? "text-ember" : accent ? "text-water" : "text-fg"}`}>{value}</dd>
     </div>
   );
 }
