@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { CountUp } from "@/components/count-up";
 import { Backdrop, riverShot, type Mood } from "./backdrop";
 
@@ -183,28 +183,11 @@ function DataTable({ head, rows, numericLast = false }: { head: string[]; rows: 
 }
 
 /*
- * Footage. Third-party videos are never copied or hosted: YouTube plays only through the official nocookie embed, news
- * videos are plain links in a new tab. The 14-ekim slide embeds its player inline (see LiveVideo); the evidence slide
- * opens a second clip in a modal (VideoDialog, owned by Deck) through this context.
+ * Footage. Third-party videos are never copied or hosted: YouTube plays only through the official nocookie embed.
+ * Every clip sits inline in its slide (see LiveVideo); nothing opens in a modal or a new tab.
  */
 const VIDEO_AYAZAGA = "o5S9h2StcDE";
-const OpenVideo = createContext<(id: string) => void>(() => {});
-
-function WatchButton({ id, children }: { id: string; children: React.ReactNode }) {
-  const open = useContext(OpenVideo);
-  return (
-    <motion.div variants={item}>
-      <button
-        type="button"
-        onClick={() => open(id)}
-        className="glass inline-flex min-h-12 items-center gap-2.5 rounded-xl px-5 text-[clamp(15px,min(1.1vw,2vh),20px)] font-semibold transition-colors duration-150 hover:bg-white/10"
-      >
-        <Play />
-        {children}
-      </button>
-    </motion.div>
-  );
-}
+const VIDEO_IHA = "8dZj6plWY2E";
 
 /**
  * Inline player (14-ekim: 16:9, problem: 9:16 Shorts). It is only in the DOM while the slide is mounted (Deck renders one slide at a
@@ -218,12 +201,15 @@ type LiveVideoProps = {
   caption: string;
   /** "16/9" (default) fills the column width; "9/16" is a tall Shorts box sized by viewport height. */
   aspect?: "16/9" | "9/16";
+  /** Small 16:9 player (<= ~220 px tall) with the caption beside it, for slides that carry it under other content. */
+  compact?: boolean;
   /** Extra embed query params appended to the base ones (e.g. loop). */
   extra?: string;
 };
-function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVideoProps) {
+function LiveVideo({ id, title, caption, aspect = "16/9", compact = false, extra = "" }: LiveVideoProps) {
   const tall = aspect === "9/16";
   const [online, setOnline] = useState(true);
+  const [sound, setSound] = useState(false); // iframe reloads with mute=0 when switched on
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);
     sync();
@@ -235,19 +221,18 @@ function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVide
     };
   }, []);
   return (
-    <motion.figure variants={item} className={`flex min-w-0 flex-col gap-3 ${tall ? "w-fit max-w-full" : "w-full"}`}>
+    <motion.figure variants={item} className={`flex min-w-0 gap-3 ${compact ? "flex-col items-start sm:flex-row sm:items-end sm:gap-4" : `flex-col ${tall ? "w-fit max-w-full" : "w-full"}`}`}>
       <div
         className={`relative overflow-hidden rounded-2xl bg-[#141d22] shadow-2xl ring-1 ring-white/10 ${
-          tall ? "aspect-[9/16] h-[60vh] max-w-full md:h-[70vh]" : "aspect-video w-full"
+          compact
+            ? "aspect-video h-[min(220px,20vh)] max-w-full shrink-0"
+            : tall
+              ? "aspect-[9/16] h-[60vh] max-w-full md:h-[70vh]"
+              : "aspect-video w-full"
         }`}
       >
-        <a
-          href={`https://www.youtube.com/watch?v=${id}`}
-          target="_blank"
-          rel="noopener"
-          aria-label="Videoyu YouTube'da aç"
-          className="absolute inset-0 flex items-center justify-center"
-        >
+        {/* fallback layer under the iframe: thumbnail + play, what stays when there is no network */}
+        <div aria-hidden="true" className="absolute inset-0 flex items-center justify-center">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
@@ -257,35 +242,53 @@ function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVide
             }}
             className="absolute inset-0 size-full object-cover"
           />
-          <span className="relative flex size-16 items-center justify-center rounded-full bg-ember text-ink shadow-lg">
+          <span className={`relative flex items-center justify-center rounded-full bg-ember text-ink shadow-lg ${compact ? "size-11" : "size-16"}`}>
             <svg aria-hidden="true" width="28" height="28" viewBox="0 0 16 16" fill="currentColor">
               <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
             </svg>
           </span>
-        </a>
+        </div>
         {online && (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&rel=0&playsinline=1${extra}`}
-            title={title}
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="absolute inset-0 size-full border-0 bg-black"
-          />
+          <>
+            {/* no pointer events: a click on the video is a click on the slide (advances), and YouTube's title link and
+                controls can't be hit by accident; sound comes from the button below */}
+            <iframe
+              src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${sound ? 0 : 1}&rel=0&playsinline=1${extra}`}
+              title={title}
+              tabIndex={-1}
+              allow="autoplay; encrypted-media; picture-in-picture"
+              referrerPolicy="strict-origin-when-cross-origin"
+              className="pointer-events-none absolute inset-0 size-full border-0 bg-black"
+            />
+            <button
+              type="button"
+              onClick={() => setSound((v) => !v)}
+              aria-label={sound ? "Sesi kapat" : "Sesi aç"}
+              aria-pressed={sound}
+              className={`absolute z-10 inline-flex items-center gap-1.5 rounded-xl bg-black/65 text-base font-semibold text-white backdrop-blur transition-colors hover:bg-black/85 ${compact ? "right-2 top-2 min-h-9 px-2.5" : "right-3 top-3 min-h-11 px-3.5"}`}
+            >
+              {sound ? "🔇" : "🔊 Ses"}
+            </button>
+          </>
         )}
       </div>
       {/* w-0 + min-w-full: the caption wraps to the video's width instead of widening a tall box */}
-      <figcaption className="w-0 min-w-full text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3">{caption}</figcaption>
+      <figcaption className={`text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3 ${compact ? "" : "w-0 min-w-full"}`}>{caption}</figcaption>
     </motion.figure>
   );
 }
 
-function LiveCtas() {
+/** Closing slide actions: one big primary (straight into the simulation, Q&A happens there), a smaller secondary. */
+function FinalCtas() {
   return (
-    <motion.div variants={item} className="flex flex-wrap gap-3">
-      <Link href="/sinema" transitionTypes={["nav-forward"]} className={`btn-ember group bg-ember text-ink ${ctaBase}`}>
-        İstanbul · 14 Ekim
-        <span className="transition-transform duration-200 group-hover:translate-x-0.5">
+    <motion.div variants={item} className="flex flex-wrap items-center gap-3 sm:gap-4">
+      <Link
+        href="/sinema"
+        transitionTypes={["nav-forward"]}
+        className="btn-ember group inline-flex min-h-16 items-center gap-3 rounded-2xl bg-ember px-8 text-[clamp(20px,min(1.7vw,3vh),32px)] font-extrabold text-ink shadow-lg lg:min-h-20 lg:px-10"
+      >
+        Tam simülasyonu izleyin
+        <span className="transition-transform duration-200 group-hover:translate-x-1">
           <Arrow />
         </span>
       </Link>
@@ -297,48 +300,6 @@ function LiveCtas() {
         İzmir · 188 mm
       </Link>
     </motion.div>
-  );
-}
-
-/** Modal player. Native <dialog>: Esc closes it, focus is trapped and restored, the page behind is inert. */
-function VideoDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const ref = useRef<HTMLDialogElement>(null);
-  useEffect(() => {
-    const d = ref.current;
-    if (!d) return;
-    if (id && !d.open) d.showModal();
-    else if (!id && d.open) d.close();
-  }, [id]);
-  return (
-    <dialog
-      ref={ref}
-      onClose={onClose}
-      onClick={(e) => {
-        if (e.target === e.currentTarget) e.currentTarget.close(); // click on the backdrop
-      }}
-      aria-label="Video oynatıcı"
-      className="m-auto max-h-none max-w-none overflow-visible bg-transparent p-0 text-fg backdrop:bg-black/85"
-    >
-      <div className="flex w-[min(94vw,calc(84vh*16/9))] flex-col gap-3">
-        <button
-          type="button"
-          onClick={() => ref.current?.close()}
-          className="glass ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-base font-semibold hover:bg-white/10"
-        >
-          Kapat <span aria-hidden="true">✕</span>
-        </button>
-        {id && (
-          <iframe
-            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`}
-            title="14 Ekim görüntüsü"
-            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-            allowFullScreen
-            referrerPolicy="strict-origin-when-cross-origin"
-            className="aspect-video w-full rounded-2xl bg-black"
-          />
-        )}
-      </div>
-    </dialog>
   );
 }
 
@@ -446,23 +407,27 @@ const SLIDES: Slide[] = [
           14 Ekim&rsquo;i yeniden oynattık: <span className="text-ember">9 noktanın 7&rsquo;si tuttu.</span>
         </Title>
         <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.7fr)] lg:gap-5">
-          <motion.div variants={group} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-            <Stat value={3650} label="Suyun ulaştığı bina" ember />
-            <Stat value={128} label="Suyun ulaştığı okul, hastane ve kritik tesis" />
-          </motion.div>
-          <DataTable
-            head={["Yer", "Gözlenen", "Model"]}
-            numericLast
-            rows={[
-              ["Ayazağa Meydanı", "1,5–2 m", "1,54 m"],
-              ["Dereboyu Caddesi", "1,70 m", "2,76 m"],
-              ["Kemerburgaz Caddesi", "200 kişi mahsur", "2,08 m"],
-              ["Baskının başlaması", "~17:30", "18:10"],
-            ]}
-          />
+          <div className="flex flex-col gap-3 lg:gap-4">
+            <motion.div variants={group} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
+              <Stat value={3650} label="Suyun ulaştığı bina" ember />
+              <Stat value={128} label="Suyun ulaştığı okul, hastane ve kritik tesis" />
+            </motion.div>
+            <Note>Model bu olaya göre kalibre edildi; bağımsız sınama uydu taşkın haritasıyla yapılacak.</Note>
+          </div>
+          <div className="flex min-w-0 flex-col gap-3 lg:gap-4">
+            <DataTable
+              head={["Yer", "Gözlenen", "Model"]}
+              numericLast
+              rows={[
+                ["Ayazağa Meydanı", "1,5–2 m", "1,54 m"],
+                ["Dereboyu Caddesi", "1,70 m", "2,76 m"],
+                ["Kemerburgaz Caddesi", "200 kişi mahsur", "2,08 m"],
+                ["Baskının başlaması", "~17:30", "18:10"],
+              ]}
+            />
+            <LiveVideo id={VIDEO_IHA} title="14 Ekim, Ayazağa: İhlas Haber Ajansı görüntüsü" caption="İhlas Haber Ajansı · 14 Ekim, Ayazağa" compact />
+          </div>
         </div>
-        <Note>Model bu olaya göre kalibre edildi; bağımsız sınama uydu taşkın haritasıyla yapılacak.</Note>
-        <WatchButton id="8dZj6plWY2E">O akşam: Ayazağa (İHA)</WatchButton>
       </>
     ),
   },
@@ -483,21 +448,6 @@ const SLIDES: Slide[] = [
             ["Hız", "30 saatlik bir seli ekran kartında 3 dakikada hesaplıyoruz."],
           ]}
         />
-      </>
-    ),
-  },
-  {
-    id: "canli",
-    nav: "Canlı",
-    mood: { ...riverShot(620, { dx: -160, dy: -120, dz: 45, lookZ: 6 }), depth: 13, rain: 0.8, buried: 0.2, contour: 0.4, ember: 1 },
-    body: () => (
-      <>
-        <Eyebrow>Canlı demo</Eyebrow>
-        <Title>
-          İstanbul&rsquo;u izleyin. <span className="text-ember">İzmir&rsquo;de yağmuru siz yağdırın.</span>
-        </Title>
-        <Lead>14 Ekim selini 3B izleyin, aynı modeli İzmir merkezinde çalıştırın. İzmir bir senaryo, henüz doğrulanmadı.</Lead>
-        <LiveCtas />
       </>
     ),
   },
@@ -552,29 +502,34 @@ const SLIDES: Slide[] = [
   },
   {
     id: "riskler",
-    nav: "Riskler",
+    nav: "Sıradaki adımlar",
     mood: { ...riverShot(300, { dx: -900, dy: -1100, dz: 950 }), depth: 2.5, rain: 0, buried: 0.7, contour: 0.7, ember: 0 },
     body: () => (
       <>
-        <Eyebrow>Riskler ve sınırlar</Eyebrow>
-        <Title>Neyi bilmediğimizi de söylüyoruz.</Title>
+        <Eyebrow>Sıradaki adımlar</Eyebrow>
+        <Title>
+          Sahaya çıkmadan önce <span className="text-ember">dört adım.</span>
+        </Title>
         <motion.ul variants={group} className="flex max-w-[1100px] flex-col">
           {[
-            "Tek olayla kalibre edildi; yanlış alarm oranı ve IoU henüz ölçülmedi.",
-            "Modelde boru ağı yok; kanalizasyondan gelen suyu göremiyor.",
-            "Kişisel veri işlemiyoruz; bina bazlı risk yalnız kurumla paylaşılır. FABDEM ticari kullanıma kapalı.",
-            "Resmi sel risk haritası değildir; onu besler.",
-          ].map((t) => (
+            ["Bağımsız doğrulama", "Uydu taşkın haritalarıyla isabet, IoU ve yanlış alarm oranını ölçeceğiz."],
+            ["Boru ağı", "İSKİ kanal verisiyle kanalizasyondan gelen suyu da modele katacağız."],
+            ["Ticari veri", "FABDEM yerine ticari kullanıma açık yükseklik verisine geçeceğiz."],
+            ["Gizlilik", "Kişisel veri işlemiyoruz; bina bazlı risk yalnız kurumlarla paylaşılır."],
+          ].map(([head, t]) => (
             <motion.li
-              key={t}
+              key={head}
               variants={item}
-              className="flex items-baseline gap-4 border-b border-line py-3 text-[clamp(18px,min(1.7vw,3vh),34px)] font-semibold leading-snug last:border-0 sm:py-4"
+              className="flex items-baseline gap-4 border-b border-line py-3 text-[clamp(18px,min(1.7vw,3vh),34px)] font-medium leading-snug text-fg-2 last:border-0 sm:py-4"
             >
               <span aria-hidden="true" className="size-2.5 shrink-0 -translate-y-0.5 rounded-full bg-ember" />
-              {t}
+              <span>
+                <strong className="font-extrabold text-fg">{head}:</strong> {t}
+              </span>
             </motion.li>
           ))}
         </motion.ul>
+        <Note>Pilot çalışma; resmi sel risk haritasının yerine geçmez, onu besler.</Note>
       </>
     ),
   },
@@ -606,7 +561,7 @@ const SLIDES: Slide[] = [
         >
           Teşekkürler<span className="text-ember">.</span>
         </motion.p>
-        <Ctas />
+        <FinalCtas />
         <motion.p variants={item} className="flex flex-wrap gap-x-4 gap-y-1 text-[clamp(15px,min(1.1vw,2vh),20px)] text-fg-2">
           <span>EkoZeka 2026 · Takım SALU</span>
           <a
@@ -630,16 +585,7 @@ export function Deck() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const backdrop = useRef<Backdrop | null>(null);
   const lock = useRef(0);
-  const [video, setVideo] = useState<string | null>(null);
-  const videoOpen = useRef(false); // read by the key/wheel/touch handlers, which live in a long-lived effect
-  const openVideo = useCallback((id: string) => {
-    videoOpen.current = true;
-    setVideo(id);
-  }, []);
-  const closeVideo = useCallback(() => {
-    videoOpen.current = false;
-    setVideo(null);
-  }, []);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
   const linked = useRef<string | null>(null); // the #slide the page was opened with
   const reduce = useReducedMotion() ?? false;
   const n = SLIDES.length;
@@ -747,13 +693,15 @@ export function Deck() {
   // keyboard, wheel, touch
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      if (videoOpen.current) return; // the player dialog owns the keyboard (Esc closes it natively)
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
-      if (["ArrowDown", "PageDown", "ArrowRight"].includes(e.key) || (e.key === " " && !e.shiftKey)) {
+      // Space / Enter belong to the focused control (button, link); presenter clickers send PageDown/PageUp anyway
+      const onControl = !!el && ["BUTTON", "A"].includes(el.tagName);
+      const pressed = (e.key === " " || e.key === "Enter") && !onControl;
+      if (["ArrowDown", "PageDown", "ArrowRight"].includes(e.key) || (pressed && !e.shiftKey)) {
         e.preventDefault();
         advance(1);
-      } else if (["ArrowUp", "PageUp", "ArrowLeft"].includes(e.key) || (e.key === " " && e.shiftKey)) {
+      } else if (["ArrowUp", "PageUp", "ArrowLeft"].includes(e.key) || (pressed && e.shiftKey)) {
         e.preventDefault();
         advance(-1);
       } else if (e.key === "Home") go(0);
@@ -762,7 +710,6 @@ export function Deck() {
     let acc = 0;
     let accT = 0;
     const onWheel = (e: WheelEvent) => {
-      if (videoOpen.current) return;
       const sc = (e.target as Element | null)?.closest?.("[data-deck-scroll]") as HTMLElement | null;
       if (sc && Math.abs(e.deltaY) > 0) {
         const more = e.deltaY > 0 ? sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1 : sc.scrollTop > 1;
@@ -787,10 +734,6 @@ export function Deck() {
     let atTop = true;
     let atBottom = true;
     const onStart = (e: TouchEvent) => {
-      if (videoOpen.current) {
-        y0 = null; // onEnd ignores a gesture that started while the player was open
-        return;
-      }
       y0 = e.touches[0]?.clientY ?? null;
       x0 = e.touches[0]?.clientX ?? 0;
       scrollable = (e.target as Element | null)?.closest?.("[data-deck-scroll]") ?? null;
@@ -827,9 +770,18 @@ export function Deck() {
   return (
     // Deck-only fonts: remap the site's display/sans variables on this subtree, the rest of the site is untouched.
     <div
-      // a click anywhere outside the inline player takes focus back from its iframe, so the arrow keys work again
-      onPointerDown={() => {
-        if (document.activeElement instanceof HTMLIFrameElement) document.activeElement.blur();
+      // a plain left click (or tap) anywhere advances; links, buttons and the player dialog do their own thing
+      onPointerDown={(e) => {
+        pointerStart.current = e.button === 0 ? { x: e.clientX, y: e.clientY } : null;
+      }}
+      onPointerUp={(e) => {
+        const start = pointerStart.current;
+        pointerStart.current = null;
+        if (!start || e.button !== 0 || last) return;
+        if (Math.hypot(e.clientX - start.x, e.clientY - start.y) >= 6) return; // drag, not a click
+        if ((e.target as Element).closest("a, button, input, select, textarea, [data-no-advance]")) return;
+        if (window.getSelection()?.isCollapsed === false) return; // text was selected
+        advance(1);
       }}
       className="fixed inset-0 touch-pinch-zoom overflow-hidden overscroll-none bg-ink font-sans [--font-bricolage:var(--font-deck-display)] [--font-geist-sans:var(--font-deck-body)]">
       <canvas ref={canvas} className="absolute inset-0 h-full w-full" aria-hidden="true" />
@@ -884,7 +836,7 @@ export function Deck() {
               animate="show"
               onAnimationComplete={() => document.dispatchEvent(new Event("deck-settled"))}
               className="flex flex-col gap-4 sm:gap-6 [@media(max-height:720px)]:gap-3">
-              <OpenVideo.Provider value={openVideo}>{slide.body()}</OpenVideo.Provider>
+              {slide.body()}
             </motion.div>
           </motion.section>
         </AnimatePresence>
@@ -940,7 +892,6 @@ export function Deck() {
         </span>
       </div>
 
-      <VideoDialog id={video} onClose={closeVideo} />
     </div>
   );
 }
