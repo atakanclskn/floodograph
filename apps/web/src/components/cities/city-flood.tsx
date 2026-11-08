@@ -4,7 +4,7 @@ import "maplibre-gl/dist/maplibre-gl.css";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { motion } from "motion/react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ExpressionSpecification,
   GeoJSONSource,
@@ -40,6 +40,7 @@ import {
   type CentreFile,
 } from "./center-data";
 import { SiteNav } from "@/components/site-nav";
+import { MobileSheet } from "@/components/demo/mobile-sheet";
 import { Water3DLayer } from "@/components/demo/water-3d";
 import { floodRepository } from "@/lib/repository";
 import { AREA_THRESHOLD_M, countAtMost, fmtDec, fmtInt } from "@/lib/scenario";
@@ -74,6 +75,20 @@ const TOP_N = 8;
 const SPOT_M = 90;
 
 /** `?yagis=188` -> 188 (rounded, clamped to 0..MAX_MM); null when absent or not a number. */
+const DESKTOP_QUERY = "(min-width: 640px)";
+/** Phones get the bottom-sheet layout; decided on the client (the map page renders client-side anyway). */
+function useIsDesktop(): boolean {
+  return useSyncExternalStore(
+    (cb) => {
+      const mq = window.matchMedia(DESKTOP_QUERY);
+      mq.addEventListener("change", cb);
+      return () => mq.removeEventListener("change", cb);
+    },
+    () => window.matchMedia(DESKTOP_QUERY).matches,
+    () => true,
+  );
+}
+
 function rainParam(q: string | null): number | null {
   const v = q == null || q.trim() === "" ? NaN : Math.round(Number(q));
   return Number.isFinite(v) ? Math.max(0, Math.min(MAX_MM, v)) : null;
@@ -154,7 +169,9 @@ export function CityFlood() {
   const [corr, setCorr] = useState<Record<CorridorKind, number>>({ derived: 0, buried_osm: 0, open: 0 });
   const [sel, setSel] = useState<Selected | null>(null);
   const selId = useRef<number | null>(null);
-  const [more, setMore] = useState(false);
+  const isDesktop = useIsDesktop();
+  // height of the phone sheet's always-visible part (reported by MobileSheet)
+  const [peekPx, setPeekPx] = useState(0);
   const blinks = useRef<Blink[]>([]);
   const blinkTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const water = useRef<Water | null>(null);
@@ -633,6 +650,16 @@ export function CityFlood() {
     return () => cancelAnimationFrame(raf);
   }, [mapReady]);
 
+  // phones: frame the map above the bottom sheet, and lift the map's (i) attribution button over it
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!mapReady || !map) return;
+    const bottom = isDesktop ? 0 : peekPx;
+    map.easeTo({ padding: { top: isDesktop ? 0 : 64, bottom, left: 0, right: 0 }, duration: 0 });
+    const ctl = container.current?.querySelector<HTMLElement>(".maplibregl-ctrl-bottom-right");
+    if (ctl) ctl.style.bottom = bottom ? `${bottom}px` : "";
+  }, [mapReady, isDesktop, peekPx]);
+
   useEffect(
     () => () => {
       clearTimeout(blinkTimer.current);
@@ -657,23 +684,192 @@ export function CityFlood() {
   const selDepth = sel && centre && sel.wm <= mm ? depthAt(sel.d, centre.levels, mm) : 0;
   const topMm = centre?.levels[centre.levels.length - 1] ?? MAX_MM;
 
-  return (
-    <div className="fixed inset-0 bg-ink">
+  const selCard = sel && (
+    <section aria-label="Seçili bina" className="flex flex-col gap-2 rounded-2xl bg-white/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <h2 className="min-w-0 text-sm font-semibold">
+          {sel.name ?? (sel.crit ? (CRIT_LABEL[sel.crit] ?? "Kritik tesis") : "Bina")}
+          {sel.name && sel.crit && <span className="ml-1.5 font-normal text-fg-3">{CRIT_LABEL[sel.crit]}</span>}
+        </h2>
+        <button
+          type="button"
+          onClick={() => setSel(null)}
+          aria-label="Seçimi kapat"
+          className="grid size-9 shrink-0 place-items-center rounded-lg text-fg-3 transition-colors duration-150 hover:bg-white/10 hover:text-fg"
+        >
+          ×
+        </button>
+      </div>
+      <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-sm">
+        <dt className="text-fg-3">Bu yağışta duvar dibinde su</dt>
+        <dd className={`font-mono tabular-nums ${selDepth >= 1.5 ? "text-ember" : ""}`}>
+          {sel.wm <= mm ? `${fmtDec(selDepth)} m` : "yok"}
+        </dd>
+        <dt className="text-fg-3">Suyun ulaştığı yağış</dt>
+        <dd className="font-mono tabular-nums">
+          {sel.wm < NEVER
+            ? sel.wm < FIRST_LEVEL_MM
+              ? `${FIRST_LEVEL_MM} kg/m²'nin altında`
+              : `~${fmtInt(Math.round(sel.wm / 5) * 5)} kg/m²`
+            : `${fmtInt(topMm)} kg/m²'ye kadar kuru`}
+        </dd>
+        <dt className="text-fg-3">Yükseklik</dt>
+        <dd className="font-mono tabular-nums">{fmtInt(sel.h)} m</dd>
+      </dl>
+    </section>
+  );
+
+  const statusNote = (
+    <p className="text-sm text-fg-3">
+      {status === "loading"
+        ? "Yükleniyor…"
+        : status === "missing"
+          ? "İzmir merkezinin bina bina analizi hazırlanıyor; birazdan burada."
+          : "Veri yüklenemedi."}
+    </p>
+  );
+
+  const corridorList = (
+    <ul className="flex flex-col gap-1.5 border-t border-line pt-3" aria-label="Merkezdeki koridorlar">
+      <li className="text-[11px] uppercase tracking-[0.1em] text-fg-3">Merkezdeki koridorlar</li>
+      {CORRIDOR_ORDER.map((k) => (
+        <li key={k} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm">
+          <svg aria-hidden="true" width="24" height="6" viewBox="0 0 24 6">
+            <line
+              x1="1"
+              y1="3"
+              x2="23"
+              y2="3"
+              stroke={CORRIDOR_STYLE[k].color}
+              strokeWidth="2.4"
+              strokeLinecap="round"
+              strokeDasharray={CORRIDOR_STYLE[k].dash ? CORRIDOR_STYLE[k].dash!.map((d) => d * 2.4).join(" ") : undefined}
+            />
+          </svg>
+          <span className={k === "derived" ? "font-medium" : "text-fg-2"}>{CORRIDOR_STYLE[k].label}</span>
+          <span className={`font-mono tabular-nums ${k === "derived" ? "text-ember" : "text-fg-2"}`}>{fmtInt(corr[k])}</span>
+        </li>
+      ))}
+    </ul>
+  );
+
+  const explainer = (
+    <p className="text-xs leading-relaxed text-fg-3">
+      Merkezdeki her bina tek tek: 20 m&rsquo;lik ızgarada 2D sığ su modeli, binalar suyun etrafından dolaştığı
+      duvarlar olarak. Model 14 Ekim İstanbul selinde kalibre edildi; seçtiğiniz yağış 14 Ekim&rsquo;in saatlik
+      desenine göre dağıtılır. Duvar dibinde su 1,5 m&rsquo;yi geçen bina turuncu, 0,5 m&rsquo;yi geçen (ya da suyun
+      ulaştığı hastane, okul, itfaiye, bakımevi) sarı yanar. Bir binaya tıklayın: o yağışta ne kadar su.
+    </p>
+  );
+
+  const slider = (
+    <input
+      id="yagis"
+      type="range"
+      className="fg-range w-full"
+      min={0}
+      max={MAX_MM}
+      step={5}
+      value={mm}
+      onChange={(e) => setMm(Number(e.target.value))}
+      aria-label="Günlük yağış"
+      aria-valuetext={`metrekareye ${mm} kilogram`}
+    />
+  );
+
+  const presetButtons = (compact: boolean) =>
+    PRESETS.map((p) => (
+      <button
+        key={p.mm}
+        type="button"
+        onClick={() => setMm(p.mm)}
+        aria-pressed={mm === p.mm}
+        className={`min-h-9 shrink-0 whitespace-nowrap rounded-lg px-3 text-xs font-medium transition-colors duration-150 ${mm === p.mm ? "bg-white/15 text-fg" : "text-fg-3 hover:bg-white/10 hover:text-fg"}`}
+      >
+        {compact ? `${p.label} · ${p.mm}` : `${p.label} · ${p.mm} kg/m²`}
+      </button>
+    ));
+
+  const backdrop = (
+    <>
       {/* maplibre-gl.css forces the map container to position:relative, so size it from a wrapper */}
       <div className="absolute inset-0">
         <div ref={container} className="h-full w-full" role="region" aria-label="İzmir merkez sel haritası" />
       </div>
       <RainOverlay intensity={() => Math.sqrt(Math.min(1, mmRef.current / MAX_MM))} />
+    </>
+  );
 
-      <header className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
+  if (!isDesktop)
+    return (
+      <div className="fixed inset-0 bg-ink">
+        {backdrop}
+        {/* phones: the map stays visible; everything else lives in one bottom sheet (the İstanbul tab is the way back) */}
+        <header className="pointer-events-none absolute inset-x-3 top-3 z-10 flex items-start">
+          <SiteNav />
+        </header>
+        <MobileSheet
+          label="İzmir paneli"
+          onPeekHeight={setPeekPx}
+          peek={
+            <div className="flex flex-col gap-2.5">
+              <div className="flex items-baseline justify-between gap-3">
+                <div className="flex min-w-0 flex-col">
+                  <h1 className="font-display text-xl font-semibold tracking-[-0.02em]">{CENTRE.name}</h1>
+                  <p className="truncate text-xs text-fg-3">Ya bu yağış burada yağsaydı?</p>
+                </div>
+                <span className="shrink-0 font-mono text-2xl font-medium tabular-nums">
+                  {fmtInt(mm)}
+                  <span className="ml-1 text-xs text-fg-3">kg/m²</span>
+                </span>
+              </div>
+              {slider}
+              <div className="-mx-4 flex gap-1.5 overflow-x-auto px-4 [scrollbar-width:none]">{presetButtons(true)}</div>
+              {status === "ready" && stats ? (
+                <dl className="grid grid-cols-4 gap-2 border-t border-line pt-2.5">
+                  <MiniStat label="Bina" value={fmtInt(stats.wet)} cls="text-water" />
+                  <MiniStat label="Acil" value={fmtInt(stats.acil)} cls="text-ember" />
+                  <MiniStat label="Yüksek" value={fmtInt(stats.yuksek)} cls="text-[#ffc23a]" />
+                  <MiniStat label="Alan" value={areaHa == null ? "…" : `${fmtInt(areaHa)} ha`} cls="text-fg" />
+                </dl>
+              ) : (
+                statusNote
+              )}
+              {selCard}
+            </div>
+          }
+        >
+          <div className="flex flex-col gap-4">
+            {status === "ready" && <Priorities rows={rank} selId={sel?.id ?? null} onPick={focusRow} />}
+            {status === "ready" && stats && (
+              <dl className="grid grid-cols-2 gap-3 border-t border-line pt-3">
+                <Stat label="Kritik tesis" value={fmtInt(stats.crit)} />
+                <Stat label="Su altındaki alan" value={areaHa == null ? "…" : `${fmtInt(areaHa)} ha`} accent />
+              </dl>
+            )}
+            {corridorList}
+            <p className="text-xs leading-relaxed text-fg-3">
+              {area && <>{area}. </>}Model, İstanbul&rsquo;daki 14 Ekim selinde sınandı: Sarıyer&rsquo;de 9 gözlem
+              noktasının 7&rsquo;si tuttu.
+            </p>
+            {explainer}
+          </div>
+        </MobileSheet>
+      </div>
+    );
+
+  return (
+    <div className="fixed inset-0 bg-ink">
+      {backdrop}
+
+      <header className="pointer-events-none absolute inset-x-5 top-5 z-10 flex flex-wrap items-start justify-between gap-2">
         <SiteNav />
         <Link
           href="/sinema"
           className="glass pointer-events-auto inline-flex min-h-11 items-center gap-2 rounded-2xl px-4 text-sm font-semibold text-fg-2 transition-colors duration-150 hover:text-fg"
         >
           <span aria-hidden="true">←</span>
-          <span className="sm:hidden">14 Ekim, İstanbul</span>
-          <span className="max-sm:hidden">İstanbul&rsquo;daki 14 Ekim seline dön</span>
+          İstanbul&rsquo;daki 14 Ekim seline dön
         </Link>
       </header>
 
@@ -681,10 +877,10 @@ export function CityFlood() {
         initial={{ opacity: 0, x: -16, filter: "blur(6px)" }}
         animate={{ opacity: 1, x: 0, filter: "blur(0px)" }}
         transition={{ duration: 0.45, ease: [0.16, 1, 0.3, 1] }}
-        className="glass absolute left-3 top-24 z-10 flex max-h-[calc(100dvh-280px)] w-[min(320px,calc(100vw-24px))] flex-col gap-4 overflow-y-auto overscroll-contain rounded-[22px] p-5 sm:left-5 max-sm:top-auto max-sm:bottom-44 max-sm:max-h-[calc(100dvh-330px)] max-sm:gap-3 max-sm:p-4"
+        className="glass absolute left-5 top-24 z-10 flex max-h-[calc(100dvh-280px)] w-[320px] flex-col gap-4 overflow-y-auto overscroll-contain rounded-[22px] p-5"
       >
         <div className="flex flex-col gap-1">
-          <h1 className="font-display text-3xl font-semibold tracking-[-0.03em] max-sm:text-2xl">{CENTRE.name}</h1>
+          <h1 className="font-display text-3xl font-semibold tracking-[-0.03em]">{CENTRE.name}</h1>
           <p className="text-sm text-fg-2">Ya bu yağış burada yağsaydı?</p>
           {area && <p className="text-xs text-fg-3">{area}</p>}
           <p className="text-xs leading-relaxed text-fg-3">
@@ -692,34 +888,7 @@ export function CityFlood() {
           </p>
         </div>
 
-        {sel && (
-          <section aria-label="Seçili bina" className="flex flex-col gap-2 rounded-2xl bg-white/5 p-3">
-            <div className="flex items-center justify-between gap-2">
-              <h2 className="min-w-0 text-sm font-semibold">
-                {sel.name ?? (sel.crit ? (CRIT_LABEL[sel.crit] ?? "Kritik tesis") : "Bina")}
-                {sel.name && sel.crit && <span className="ml-1.5 font-normal text-fg-3">{CRIT_LABEL[sel.crit]}</span>}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setSel(null)}
-                aria-label="Seçimi kapat"
-                className="grid size-8 shrink-0 place-items-center rounded-lg text-fg-3 transition-colors duration-150 hover:bg-white/10 hover:text-fg"
-              >
-                ×
-              </button>
-            </div>
-            <dl className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-1 text-sm">
-              <dt className="text-fg-3">Bu yağışta duvar dibinde su</dt>
-              <dd className={`font-mono tabular-nums ${selDepth >= 1.5 ? "text-ember" : ""}`}>
-                {sel.wm <= mm ? `${fmtDec(selDepth)} m` : "yok"}
-              </dd>
-              <dt className="text-fg-3">Suyun ulaştığı yağış</dt>
-              <dd className="font-mono tabular-nums">{sel.wm < NEVER ? (sel.wm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} kg/m²'nin altında` : `~${fmtInt(Math.round(sel.wm / 5) * 5)} kg/m²`) : `${fmtInt(topMm)} kg/m²'ye kadar kuru`}</dd>
-              <dt className="text-fg-3">Yükseklik</dt>
-              <dd className="font-mono tabular-nums">{fmtInt(sel.h)} m</dd>
-            </dl>
-          </section>
-        )}
+        {selCard}
 
         {status === "ready" && stats ? (
           <dl className="grid grid-cols-2 gap-3">
@@ -731,13 +900,7 @@ export function CityFlood() {
             <Stat label="Yüksek (≥0,5 m)" value={fmtInt(stats.yuksek)} yellow />
           </dl>
         ) : (
-          <p className="text-sm text-fg-3">
-            {status === "loading"
-              ? "Yükleniyor…"
-              : status === "missing"
-                ? "İzmir merkezinin bina bina analizi hazırlanıyor; birazdan burada."
-                : "Veri yüklenemedi."}
-          </p>
+          statusNote
         )}
 
         {status === "ready" && (
@@ -746,35 +909,8 @@ export function CityFlood() {
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={() => setMore((v) => !v)}
-          aria-expanded={more}
-          className="min-h-9 self-start rounded-lg px-2 text-xs font-medium text-fg-3 transition-colors duration-150 hover:bg-white/10 hover:text-fg sm:hidden"
-        >
-          {more ? "Ayrıntıları gizle" : "Ayrıntılar"}
-        </button>
-        <div className={`flex flex-col gap-4 ${more ? "" : "max-sm:hidden"}`}>
-          <ul className="flex flex-col gap-1.5 border-t border-line pt-3" aria-label="Merkezdeki koridorlar">
-            <li className="text-[11px] uppercase tracking-[0.1em] text-fg-3">Merkezdeki koridorlar</li>
-            {CORRIDOR_ORDER.map((k) => (
-              <li key={k} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm">
-                <svg aria-hidden="true" width="24" height="6" viewBox="0 0 24 6">
-                  <line x1="1" y1="3" x2="23" y2="3" stroke={CORRIDOR_STYLE[k].color} strokeWidth="2.4" strokeLinecap="round"
-                    strokeDasharray={CORRIDOR_STYLE[k].dash ? CORRIDOR_STYLE[k].dash!.map((d) => d * 2.4).join(" ") : undefined} />
-                </svg>
-                <span className={k === "derived" ? "font-medium" : "text-fg-2"}>{CORRIDOR_STYLE[k].label}</span>
-                <span className={`font-mono tabular-nums ${k === "derived" ? "text-ember" : "text-fg-2"}`}>{fmtInt(corr[k])}</span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs leading-relaxed text-fg-3">
-            Merkezdeki her bina tek tek: 20 m&rsquo;lik ızgarada 2D sığ su modeli, binalar suyun etrafından dolaştığı
-            duvarlar olarak. Model 14 Ekim İstanbul selinde kalibre edildi; seçtiğiniz yağış 14 Ekim&rsquo;in saatlik
-            desenine göre dağıtılır. Duvar dibinde su 1,5 m&rsquo;yi geçen bina turuncu, 0,5 m&rsquo;yi geçen (ya da suyun
-            ulaştığı hastane, okul, itfaiye, bakımevi) sarı yanar. Bir binaya tıklayın: o yağışta ne kadar su.
-          </p>
-        </div>
+        {corridorList}
+        {explainer}
       </motion.aside>
 
       {status === "ready" && (
@@ -788,7 +924,7 @@ export function CityFlood() {
         </motion.aside>
       )}
 
-      <div className="glass absolute inset-x-3 bottom-3 z-10 mx-auto flex max-w-[760px] flex-col gap-3 rounded-[22px] p-4 sm:bottom-5">
+      <div className="glass absolute inset-x-3 bottom-5 z-10 mx-auto flex max-w-[760px] flex-col gap-3 rounded-[22px] p-4">
         <div className="flex items-baseline justify-between gap-3">
           <label htmlFor="yagis" className="text-sm font-semibold">
             Günlük yağış
@@ -798,31 +934,19 @@ export function CityFlood() {
             <span className="ml-1 text-sm text-fg-3">kg/m²</span>
           </span>
         </div>
-        <input
-          id="yagis"
-          type="range"
-          className="fg-range w-full"
-          min={0}
-          max={MAX_MM}
-          step={5}
-          value={mm}
-          onChange={(e) => setMm(Number(e.target.value))}
-          aria-valuetext={`metrekareye ${mm} kilogram`}
-        />
-        <div className="flex flex-wrap gap-1.5">
-          {PRESETS.map((p) => (
-            <button
-              key={p.mm}
-              type="button"
-              onClick={() => setMm(p.mm)}
-              aria-pressed={mm === p.mm}
-              className={`min-h-9 rounded-lg px-3 text-xs font-medium transition-colors duration-150 ${mm === p.mm ? "bg-white/15 text-fg" : "text-fg-3 hover:bg-white/10 hover:text-fg"}`}
-            >
-              {p.label} · {p.mm} kg/m²
-            </button>
-          ))}
-        </div>
+        {slider}
+        <div className="flex flex-wrap gap-1.5">{presetButtons(false)}</div>
       </div>
+    </div>
+  );
+}
+
+/** Phone panel figure: a short label over a short number. */
+function MiniStat({ label, value, cls }: { label: string; value: string; cls: string }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <dt className="truncate text-[10px] uppercase tracking-[0.08em] text-fg-3">{label}</dt>
+      <dd className={`truncate font-mono text-[15px] font-medium tabular-nums ${cls}`}>{value}</dd>
     </div>
   );
 }
