@@ -20,12 +20,32 @@ DEFAULT_HEIGHT_M = 9.0
 ML_ID_BASE = 9_000_000_000_000  # far above any OSM id
 
 
-def _download(bbox, path: Path) -> None:
+def _download(bbox, path: Path, kind: str = "building") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     w, s, e, n = bbox
     exe = Path(sys.executable).with_name("overturemaps.exe" if sys.platform == "win32" else "overturemaps")
-    subprocess.run([str(exe), "download", f"--bbox={w},{s},{e},{n}", "-f", "geoparquet", "--type=building",
+    subprocess.run([str(exe), "download", f"--bbox={w},{s},{e},{n}", "-f", "geoparquet", f"--type={kind}",
                     "-o", str(path)], check=True)
+
+
+def waterways(bbox, cache_dir: Path) -> gpd.GeoDataFrame:
+    """Streams/rivers/drains from Overture's water theme (OSM-derived), same columns as osm.waterways.
+    Used when Overpass cannot serve a whole metropolitan area; `buried` from culvert/tunnel hints."""
+    path = cache_dir / "overture_water.parquet"
+    if not path.exists():
+        _download(bbox, path, "water")
+    g = gpd.read_parquet(path)
+    g = g[g.geometry.geom_type.isin(["LineString", "MultiLineString"])].copy()
+    cls = g.get("class", pd.Series(index=g.index, dtype=object)).fillna("").astype(str)
+    sub = g.get("subtype", pd.Series(index=g.index, dtype=object)).fillna("").astype(str)
+    g = g[sub.isin(["river", "stream", "canal", "water"]) | cls.isin(["river", "stream", "canal", "drain", "ditch", "brook"])]
+    cls = cls.loc[g.index]
+    level = pd.to_numeric(g.get("level", pd.Series(index=g.index, dtype=float)), errors="coerce").fillna(0)
+    g["buried"] = cls.str.contains("culvert|tunnel") | (level < 0)
+    names = g.get("names", pd.Series(index=g.index, dtype=object))
+    g["name"] = names.apply(lambda d: d.get("primary") if isinstance(d, dict) else None)
+    out = gpd.GeoDataFrame(pd.DataFrame({"name": g["name"].values, "buried": g["buried"].values}), geometry=list(g.geometry.values))
+    return out.set_crs(4326, allow_override=True)
 
 
 def _osm_id(rec: str | None) -> float:

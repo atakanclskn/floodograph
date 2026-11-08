@@ -40,8 +40,15 @@ def osm_layers(city: CityConfig):
 
 @cached("waterways")
 def osm_waterways(city: CityConfig):
-    """Only the streams (corridor classification); a whole-city run must not pull every building over Overpass."""
-    return osm.waterways(city.hydro_bbox)
+    """Only the streams (corridor classification); a whole-city run must not pull every building over Overpass.
+    Overpass times out on a whole metropolitan area: fall back to Overture's water theme (OSM-derived)."""
+    w, s_, e, n = city.hydro_bbox
+    if (e - w) * (n - s_) > 0.05:  # a whole city: Overpass would only time out (6 x 3 min) before the fallback
+        return overture.waterways(city.hydro_bbox, city.data_dir / "cache")
+    try:
+        return osm.waterways(city.hydro_bbox)
+    except RuntimeError:
+        return overture.waterways(city.hydro_bbox, city.data_dir / "cache")
 
 
 @cached("footprints")
