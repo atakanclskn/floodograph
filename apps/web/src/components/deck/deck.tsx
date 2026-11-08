@@ -303,7 +303,7 @@ const SLIDES: Slide[] = [
     body: () => (
       <>
         <Eyebrow n="09">Takım SALU</Eyebrow>
-        <Title>Adımızı kedilerimizden aldık: Salep ve Luna.</Title>
+        <Title>Bilgisayar bilimi, görüntü işleme ve otomasyon: şehri selden önce görmek için bir aradayız.</Title>
         <motion.ul variants={group} className="flex flex-wrap gap-3">
           {["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"].map((n) => (
             <motion.li key={n} variants={item} className="glass rounded-2xl px-4 py-2.5 font-display text-base font-semibold sm:px-5 sm:py-3 sm:text-lg">
