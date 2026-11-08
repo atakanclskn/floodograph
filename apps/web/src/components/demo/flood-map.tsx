@@ -393,11 +393,11 @@ export function FloodMap(props: FloodMapProps) {
     const map = mapRef.current;
     if (!mapReady || !map || !grid || !frames) return;
     // a previous run of this effect (dev double-invoke, fast refresh) may have left it behind
-    if (map.getLayer("water")) map.removeLayer("water");
+    if (map.getLayer("flood-water")) map.removeLayer("flood-water");
     const lowPower = window.matchMedia("(pointer: coarse)").matches || (navigator.hardwareConcurrency ?? 8) <= 4;
-    const water = new Water3DLayer(grid, "water", lowPower);
+    const water = new Water3DLayer(grid, "flood-water", lowPower);
     map.addLayer(water, "corridor-glow");
-    map.setLayoutProperty("water", "visibility", usePlayback.getState().mode === "scenario" ? "visible" : "none");
+    map.setLayoutProperty("flood-water", "visibility", usePlayback.getState().mode === "scenario" ? "visible" : "none");
     const cellHa = (grid.res_m * grid.res_m) / 10_000;
 
     let raf = 0;
@@ -449,7 +449,7 @@ export function FloodMap(props: FloodMapProps) {
       cancelAnimationFrame(raf);
       unsubT();
       unsubLoad();
-      if (map.getLayer("water")) map.removeLayer("water");
+      if (map.getLayer("flood-water")) map.removeLayer("flood-water");
     };
   }, [mapReady, grid, frames]);
 
@@ -514,8 +514,8 @@ export function FloodMap(props: FloodMapProps) {
 
   useEffect(() => {
     const map = mapRef.current;
-    if (!mapReady || !map?.getLayer("water")) return;
-    map.setLayoutProperty("water", "visibility", mode === "scenario" ? "visible" : "none");
+    if (!mapReady || !map?.getLayer("flood-water")) return;
+    map.setLayoutProperty("flood-water", "visibility", mode === "scenario" ? "visible" : "none");
   }, [mapReady, mode, grid, frames]);
 
   useEffect(() => {

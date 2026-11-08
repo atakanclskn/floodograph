@@ -122,12 +122,12 @@ export function CityFlood() {
   useEffect(() => {
     const map = mapRef.current;
     if (!mapReady || !map || !data) return;
-    if (map.getLayer("water")) map.removeLayer("water");
-    const water = new Water3DLayer(data.scenario.grid!, "water", false, 1);
+    if (map.getLayer("flood-water")) map.removeLayer("flood-water");
+    const water = new Water3DLayer(data.scenario.grid!, "flood-water", false, 1);
     map.addLayer(water, "basemap-buildings");
     waterRef.current = water;
     return () => {
-      if (map.getLayer("water")) map.removeLayer("water");
+      if (map.getLayer("flood-water")) map.removeLayer("flood-water");
       waterRef.current = null;
     };
   }, [mapReady, data]);

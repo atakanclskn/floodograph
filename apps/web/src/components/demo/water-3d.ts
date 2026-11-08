@@ -38,7 +38,7 @@ export class Water3DLayer implements CustomLayerInterface {
   /** keep repainting while visible so the water keeps moving */
   animate = true;
 
-  constructor(grid: GridMeta, id = "water", lowPower = false, sub?: number) {
+  constructor(grid: GridMeta, id = "flood-water", lowPower = false, sub?: number) {
     this.id = id;
     const geo = new GridGeo(grid);
     this.geo = geo;
