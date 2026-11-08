@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion, type Variants } from "motion/react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { CountUp } from "@/components/count-up";
 import { Backdrop, riverShot, type Mood } from "./backdrop";
 
@@ -18,11 +18,17 @@ const item: Variants = {
 };
 const group: Variants = { hidden: {}, show: { transition: { staggerChildren: 0.09, delayChildren: 0.18 } } };
 
-function Eyebrow({ n, children }: { n: string; children: React.ReactNode }) {
+/*
+ * Presentation scale. Every size is clamp(mobile min, min(vw, vh) term, 1080p cap): at 1920x1080 the cap is what you
+ * get, at 1366x768 the vh term keeps it from overflowing. Nothing below 14px on any screen, 16px+ at 1080p.
+ */
+function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
-    <motion.p variants={item} className="flex items-center gap-3 font-mono text-[13px] tracking-[0.08em] text-fg-3">
-      <span className="text-ember">{n}</span>
-      <span className="h-px w-8 bg-line" />
+    <motion.p
+      variants={item}
+      className="flex items-center gap-3 text-[clamp(14px,min(1.05vw,1.9vh),20px)] font-semibold tracking-[0.04em] text-fg-3"
+    >
+      <span className="h-0.5 w-8 shrink-0 bg-ember" />
       {children}
     </motion.p>
   );
@@ -31,7 +37,7 @@ function Title({ children, className = "" }: { children: React.ReactNode; classN
   return (
     <motion.h2
       variants={item}
-      className={`font-display text-[clamp(28px,min(4.8vw,7.5vh),72px)] font-semibold leading-[1] tracking-[-0.035em] [text-wrap:balance] ${className}`}
+      className={`font-display text-[clamp(30px,min(4.6vw,8vh),84px)] font-extrabold leading-[1.02] tracking-[-0.035em] [text-wrap:balance] ${className}`}
     >
       {children}
     </motion.h2>
@@ -39,30 +45,44 @@ function Title({ children, className = "" }: { children: React.ReactNode; classN
 }
 function Lead({ children }: { children: React.ReactNode }) {
   return (
-    <motion.p variants={item} className="max-w-[620px] text-[clamp(15px,1.5vw,20px)] leading-relaxed text-fg-2">
+    <motion.p variants={item} className="max-w-[52ch] text-[clamp(16px,min(1.5vw,2.7vh),30px)] leading-[1.5] text-fg-2">
+      {children}
+    </motion.p>
+  );
+}
+function Note({ children }: { children: React.ReactNode }) {
+  return (
+    <motion.p variants={item} className="max-w-[62ch] text-[clamp(15px,min(1.05vw,1.9vh),20px)] leading-snug text-fg-3">
       {children}
     </motion.p>
   );
 }
 function Stat({ value, unit, label, ember = false, raw }: { value?: number; unit?: string; label: string; ember?: boolean; raw?: string }) {
   return (
-    <motion.div variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
-      <p className={`font-mono text-[clamp(24px,3.4vw,48px)] font-medium leading-none tracking-[-0.04em] ${ember ? "text-ember" : "text-fg"}`}>
+    <motion.div variants={item} className="glass flex flex-col gap-2 rounded-2xl p-4 sm:gap-3 sm:p-6">
+      <p
+        className={`font-mono text-[clamp(28px,min(3.4vw,5.6vh),68px)] font-semibold leading-none tracking-[-0.04em] [font-variant-numeric:tabular-nums] ${ember ? "text-ember" : "text-fg"}`}
+      >
         {raw ?? <CountUp value={value ?? 0} />}
-        {unit && <span className="ml-1.5 text-[0.45em] font-normal tracking-normal text-fg-3">{unit}</span>}
+        {unit && <span className="ml-2 text-[0.45em] font-normal tracking-normal text-fg-3">{unit}</span>}
       </p>
-      <p className="text-xs leading-snug text-fg-2 sm:text-sm">{label}</p>
+      <p className="text-[clamp(14px,min(1.1vw,2vh),20px)] leading-snug text-fg-2">{label}</p>
     </motion.div>
   );
 }
-function Cards({ items, numbered = false }: { items: string[][]; numbered?: boolean }) {
+function Cards({ items, numbered = false, cols = 3 }: { items: string[][]; numbered?: boolean; cols?: 2 | 3 }) {
   return (
-    <motion.div variants={group} className="grid max-w-[960px] gap-2 md:grid-cols-3 md:gap-3">
+    <motion.div
+      variants={group}
+      className={`grid max-w-[1200px] gap-3 md:gap-4 ${cols === 2 ? "md:grid-cols-2" : "md:grid-cols-3"}`}
+    >
       {items.map(([h, p], i) => (
-        <motion.div key={h} variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
-          {numbered && <span className="font-mono text-xs text-ember">0{i + 1}</span>}
-          <span className="font-display text-lg font-semibold leading-tight sm:text-xl">{h}</span>
-          <span className="text-[13px] leading-relaxed text-fg-2 sm:text-sm">{p}</span>
+        <motion.div key={h} variants={item} className="glass flex flex-col gap-2 rounded-2xl p-4 sm:gap-3 sm:p-6">
+          {numbered && (
+            <span className="font-mono text-[clamp(15px,min(1.05vw,1.9vh),20px)] font-semibold text-ember">0{i + 1}</span>
+          )}
+          <span className="font-display text-[clamp(18px,min(1.35vw,2.4vh),26px)] font-bold leading-tight">{h}</span>
+          <span className="text-[clamp(15px,min(1.05vw,1.85vh),20px)] leading-relaxed text-fg-2">{p}</span>
         </motion.div>
       ))}
     </motion.div>
@@ -82,14 +102,12 @@ function Arrow() {
     </svg>
   );
 }
+const ctaBase =
+  "inline-flex min-h-14 items-center gap-2.5 rounded-2xl px-7 text-[clamp(17px,1.15vw,22px)] font-semibold lg:min-h-16";
 function Ctas() {
   return (
     <motion.div variants={item} className="flex flex-wrap gap-3">
-      <Link
-        href="/sinema"
-        transitionTypes={["nav-forward"]}
-        className="btn-ember group inline-flex min-h-14 items-center gap-2.5 rounded-2xl bg-ember px-7 text-[17px] font-semibold text-ink"
-      >
+      <Link href="/sinema" transitionTypes={["nav-forward"]} className={`btn-ember group bg-ember text-ink ${ctaBase}`}>
         İstanbul: 14 Ekim seli
         <span className="transition-transform duration-200 group-hover:translate-x-0.5">
           <Arrow />
@@ -98,13 +116,212 @@ function Ctas() {
       <Link
         href="/izmir"
         transitionTypes={["nav-forward"]}
-        className="glass inline-flex min-h-14 items-center gap-2.5 rounded-2xl px-6 text-[17px] font-semibold transition-colors duration-150 hover:bg-white/10"
+        className={`glass transition-colors duration-150 hover:bg-white/10 ${ctaBase}`}
       >
         İzmir&rsquo;de olsaydı?
       </Link>
     </motion.div>
   );
 }
+function IzmirCta() {
+  return (
+    <motion.div variants={item} className="flex flex-wrap gap-3">
+      <Link href="/izmir?yagis=188" transitionTypes={["nav-forward"]} className={`btn-ember group bg-ember text-ink ${ctaBase}`}>
+        İzmir senaryosunu aç
+        <span className="transition-transform duration-200 group-hover:translate-x-0.5">
+          <Arrow />
+        </span>
+      </Link>
+    </motion.div>
+  );
+}
+/** Nested boxes: each level sits inside the previous one, so the sizes read as a funnel. */
+type Level = { value: string; unit: string; label: string; ember?: boolean };
+function Nest({ levels }: { levels: Level[] }) {
+  const [top, ...rest] = levels;
+  if (!top) return null;
+  return (
+    <motion.div variants={item} className="glass flex max-w-[1100px] flex-col gap-3 rounded-2xl p-3 sm:p-4">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:gap-5">
+        <p
+          className={`shrink-0 font-mono text-[clamp(26px,min(3vw,5vh),60px)] font-semibold leading-none tracking-[-0.04em] [font-variant-numeric:tabular-nums] ${top.ember ? "text-ember" : "text-fg"}`}
+        >
+          {top.value}
+          <span className="ml-2 text-[0.45em] font-normal tracking-normal text-fg-3">{top.unit}</span>
+        </p>
+        <p className="text-[clamp(14px,min(1.1vw,2vh),20px)] leading-snug text-fg-2">{top.label}</p>
+      </div>
+      {rest.length > 0 && <Nest levels={rest} />}
+    </motion.div>
+  );
+}
+function DataTable({ head, rows, numericLast = false }: { head: string[]; rows: string[][]; numericLast?: boolean }) {
+  const last = head.length - 1;
+  return (
+    <motion.div variants={item} className="glass max-w-[1100px] overflow-hidden rounded-2xl">
+      <table className="w-full text-left text-[clamp(15px,min(1.1vw,2vh),22px)] leading-snug">
+        <thead>
+          <tr className="border-b border-line text-[0.85em] text-fg-3">
+            {head.map((h, i) => (
+              <th key={h} scope="col" className={`px-4 py-2 font-semibold sm:px-5 ${numericLast && i === last ? "text-right" : ""}`}>
+                {h}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r) => (
+            <tr key={r[0]} className="border-b border-line align-top last:border-0">
+              {r.map((c, i) => (
+                <td
+                  key={i}
+                  className={`px-4 py-2 sm:px-5 sm:py-2.5 ${
+                    i === 0
+                      ? "font-semibold"
+                      : numericLast && i === last
+                        ? "text-right font-mono font-semibold [font-variant-numeric:tabular-nums]"
+                        : "text-fg-2"
+                  }`}
+                >
+                  {c}
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </motion.div>
+  );
+}
+
+/*
+ * Footage. Third-party videos are never copied: YouTube plays only through the official nocookie embed, news-site
+ * videos are plain links that open in a new tab. The player lives in one dialog owned by Deck; slides open it
+ * through this context.
+ */
+const VIDEO_AYAZAGA = "o5S9h2StcDE";
+const OpenVideo = createContext<(id: string) => void>(() => {});
+
+function WatchButton({ id, children }: { id: string; children: React.ReactNode }) {
+  const open = useContext(OpenVideo);
+  return (
+    <motion.div variants={item}>
+      <button
+        type="button"
+        onClick={() => open(id)}
+        className="glass inline-flex min-h-12 items-center gap-2.5 rounded-xl px-5 text-[clamp(15px,min(1.1vw,2vh),20px)] font-semibold transition-colors duration-150 hover:bg-white/10"
+      >
+        <Play />
+        {children}
+      </button>
+    </motion.div>
+  );
+}
+
+function FootageCard(
+  p: { place: string; source: string; badge: string } & ({ kind: "youtube"; id: string } | { kind: "link"; href: string }),
+) {
+  const open = useContext(OpenVideo);
+  const cls =
+    "glass group flex w-full flex-col gap-3 rounded-2xl p-3 text-left transition-colors duration-150 hover:bg-white/10 sm:flex-row sm:gap-4 sm:p-4";
+  // media block: a dark surface that stays presentable when the thumbnail can't load (offline projector)
+  const media =
+    p.kind === "youtube" ? (
+      <span className="relative block aspect-video w-full shrink-0 overflow-hidden rounded-xl bg-[#141d22] sm:w-[40%]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={`https://i.ytimg.com/vi/${p.id}/hqdefault.jpg`}
+          alt=""
+          loading="lazy"
+          onError={(e) => {
+            e.currentTarget.style.display = "none";
+          }}
+          className="absolute inset-0 size-full object-cover"
+        />
+        <span className="absolute inset-0 flex items-center justify-center bg-black/25 transition-colors duration-150 group-hover:bg-black/10">
+          <span className="flex size-14 items-center justify-center rounded-full bg-ember text-ink shadow-lg sm:size-16">
+            <svg aria-hidden="true" width="26" height="26" viewBox="0 0 16 16" fill="currentColor">
+              <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
+            </svg>
+          </span>
+        </span>
+      </span>
+    ) : (
+      <span className="flex aspect-video w-full shrink-0 flex-col items-center justify-center gap-1 rounded-xl bg-[#141d22] px-3 text-center sm:w-[40%]">
+        <span className="font-display text-[clamp(22px,min(2.1vw,3.6vh),40px)] font-extrabold leading-tight">{p.source}</span>
+        <span className="text-[clamp(14px,min(1.05vw,1.9vh),20px)] font-semibold text-ember">↗ Haberde izle</span>
+      </span>
+    );
+  const text = (
+    <span className="flex min-w-0 flex-1 flex-col justify-center gap-2">
+      <span className="text-[clamp(15px,min(1.1vw,1.95vh),21px)] font-semibold leading-snug">{p.place}</span>
+      <span className="text-[clamp(14px,min(0.95vw,1.7vh),18px)] text-fg-3">Kaynak: {p.source}</span>
+      <span className="w-fit rounded-lg border border-ember/40 bg-ember/15 px-2.5 py-1 text-[clamp(14px,min(0.95vw,1.7vh),18px)] font-semibold leading-snug text-ember">
+        {p.badge}
+      </span>
+    </span>
+  );
+  return (
+    <motion.div variants={item}>
+      {p.kind === "youtube" ? (
+        <button type="button" onClick={() => open(p.id)} aria-label={`Videoyu oynat: ${p.place}`} className={cls}>
+          {media}
+          {text}
+        </button>
+      ) : (
+        <a href={p.href} target="_blank" rel="noopener" className={cls}>
+          {media}
+          {text}
+        </a>
+      )}
+    </motion.div>
+  );
+}
+
+/** Modal player. Native <dialog>: Esc closes it, focus is trapped and restored, the page behind is inert. */
+function VideoDialog({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (id && !d.open) d.showModal();
+    else if (!id && d.open) d.close();
+  }, [id]);
+  return (
+    <dialog
+      ref={ref}
+      onClose={onClose}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) e.currentTarget.close(); // click on the backdrop
+      }}
+      aria-label="Video oynatıcı"
+      className="m-auto max-h-none max-w-none overflow-visible bg-transparent p-0 text-fg backdrop:bg-black/85"
+    >
+      <div className="flex w-[min(94vw,calc(84vh*16/9))] flex-col gap-3">
+        <button
+          type="button"
+          onClick={() => ref.current?.close()}
+          className="glass ml-auto inline-flex min-h-11 items-center gap-2 rounded-xl px-4 text-base font-semibold hover:bg-white/10"
+        >
+          Kapat <span aria-hidden="true">✕</span>
+        </button>
+        {id && (
+          <iframe
+            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&rel=0`}
+            title="14 Ekim görüntüsü"
+            allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+            allowFullScreen
+            referrerPolicy="strict-origin-when-cross-origin"
+            className="aspect-video w-full rounded-2xl bg-black"
+          />
+        )}
+      </div>
+    </dialog>
+  );
+}
+
+const statGrid3 ="grid max-w-[1200px] grid-cols-1 gap-3 sm:grid-cols-3 sm:gap-4";
+const statGrid4 = "grid max-w-[1200px] grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4";
 
 const SLIDES: Slide[] = [
   {
@@ -114,19 +331,18 @@ const SLIDES: Slide[] = [
     body: () => (
       <>
         <motion.div variants={item} className="flex items-center gap-3">
-          <Image src="/icon.png" alt="" width={40} height={40} priority />
-          <span className="font-display text-2xl font-bold tracking-[-0.02em]">floodograph</span>
+          <Image src="/icon.png" alt="" width={44} height={44} priority />
+          <span className="font-display text-[clamp(22px,1.6vw,30px)] font-extrabold tracking-[-0.02em]">floodograph</span>
         </motion.div>
-        <Title className="text-[clamp(32px,min(6.4vw,9.5vh),96px)]">
+        <Title className="text-[clamp(32px,min(6vw,9vh),104px)]">
           Su yolunu her zaman bulur. <span className="text-ember">Biz ondan önce buluruz.</span>
         </Title>
         <Lead>
-          Şehrin altına gömülen dereleri açık yükseklik verisinden yeniden bulur, seli fizik tabanlı bir modelle saat saat
-          simüle eder ve binaları müdahale önceliğine göre sıralar.
+          Şehrin altına gömülen dereleri açık veriden yeniden çizer, seli saat saat simüle eder, önce hangi binaya gidileceğini söyler.
         </Lead>
         <Ctas />
-        <motion.p variants={item} className="font-mono text-xs text-fg-3">
-          EkoZeka 2026 · Takım SALU · İstanbul, Sarıyer pilotu
+        <motion.p variants={item} className="text-[clamp(16px,min(1.2vw,2.1vh),22px)] font-medium text-fg-3">
+          EkoZeka 2026 · Takım SALU
         </motion.p>
       </>
     ),
@@ -137,66 +353,63 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(-420, { dx: -260, dy: -320, dz: 150, lookZ: 20 }), depth: 5.5, rain: 1, buried: 0.15, contour: 0.35, ember: 0.15 },
     body: () => (
       <>
-        <Eyebrow n="01">14 Ekim 2026 · İstanbul</Eyebrow>
-        <Title>Bir günde, bir aydan fazla yağmur.</Title>
+        <Eyebrow>14 Ekim 2026 · Sarıyer, Ayazağa</Eyebrow>
+        <Title>Saat 17:30. Dereboyu Caddesi bir nehre döndü.</Title>
         <Lead>
-          Ayazağa’da dere taştı, caddeler nehre döndü, araçlar ve bir İETT otobüsü sürüklendi. Suyun hangi sokaktan geçeceğini
-          önceden gösteren güncel bir harita yoktu.
+          Tek günde 188 mm yağmur. Kemerburgaz Caddesi&rsquo;nde 200 kişi mahsur kaldı, araçlar ve bir İETT otobüsü sürüklendi. Suyun
+          hangi sokaktan geçeceğini önceden gösteren bir harita yoktu.
         </Lead>
-        <motion.div variants={group} className="grid max-w-[760px] grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat raw="1985" label="İBB'ye göre bu yıldan beri en yağışlı gün" />
-          <Stat value={150} unit="mm" label="Sarıyer istasyonunda günlük toplam yağış" />
-          <Stat raw="29,2" unit="mm/sa" label="En yüksek saatlik yağış (19:00)" />
-          <Stat raw="≥3" label="Can kaybı (kesin sayı henüz netleşmedi)" ember />
+        <motion.div variants={group} className={statGrid3}>
+          <Stat value={188} unit="mm" label="Sarıyer istasyonu, tek günde" />
+          <Stat raw="1985" label="İBB'ye göre o yıldan beri en yağışlı gün" />
+          <Stat raw="≥3" label="Hayatını kaybeden (sayı kesinleşmedi)" ember />
         </motion.div>
+        <WatchButton id={VIDEO_AYAZAGA}>O akşam, Ayazağa</WatchButton>
       </>
     ),
   },
   {
     id: "problem",
-    nav: "Gömülü dereler",
+    nav: "Problem",
     mood: { ...riverShot(-120, { dx: -40, dy: -120, dz: 850 }), depth: 3, rain: 0, buried: 1, contour: 0.85, ember: 0 },
     body: () => (
       <>
-        <Eyebrow n="02">Problem</Eyebrow>
+        <Eyebrow>Problem</Eyebrow>
         <Title>
-          Üstü betonla kapatılan dereler, <span className="text-ember">selde yeniden akıyor.</span>
+          Dereyi betonla örttük. <span className="text-ember">Su, yolunu unutmadı.</span>
         </Title>
         <Lead>
-          Üstü betonla örtülen dere haritadan silinir, ama arazinin eğimi değişmez. Kuvvetli yağışta su eski yatağını bulur ve
-          o yatağın üstüne yapılmış binaları basar.
+          Üstü kapatılan dere haritadan silinir, arazinin eğimi ise yerinde kalır. Kuvvetli yağışta su eski yatağına döner ve
+          üstüne yapılan sokakları, binaları basar.
         </Lead>
-        <motion.div variants={group} className="grid max-w-[700px] grid-cols-3 gap-2 sm:gap-3">
-          <Stat value={59} label="Arazide var, haritada yok: toplam 32,5 km akış koridoru" ember />
-          <Stat value={4} label="OSM'de kayıtlı gömülü dere parçası" />
-          <Stat value={22} label="OSM'de kayıtlı açık dere" />
+        <motion.div variants={group} className={statGrid3}>
+          <Stat value={59} label="Sarıyer'de arazide olup haritada olmayan akış koridoru (32,5 km)" ember />
+          <Stat value={4} label="Haritada kayıtlı gömülü dere parçası" />
+          <Stat value={3706} label="İstanbul genelinde bulduğumuz akış koridoru" />
         </motion.div>
       </>
     ),
   },
   {
-    id: "yontem",
-    nav: "Yöntem",
+    id: "cozum",
+    nav: "Çözüm",
     mood: { ...riverShot(150, { dx: -260, dy: 420, dz: 360 }), depth: 4.5, rain: 0.3, buried: 0.5, contour: 1, ember: 0 },
     body: () => (
       <>
-        <Eyebrow n="03">Yöntem</Eyebrow>
-        <Title>Yükseklikten dereye, dereden kapıya.</Title>
-        <motion.ol variants={group} className="grid max-w-[980px] gap-2 sm:grid-cols-5 sm:gap-3">
-          {[
-            ["FABDEM", "Binalardan ve ağaçlardan arındırılmış 30 m yükseklik modeli."],
-            ["Dere ağı + HAND", "Suyun akış yönü ve biriktiği yerler; her binanın en yakın dere yatağına göre yüksekliği."],
-            ["16.787 bina", "Overture verisi: OpenStreetMap ve Microsoft'un uydu görüntüsünden çıkardığı bina tabanları."],
-            ["Sığ su çözücüsü", "HEC-RAS ile aynı sınıftan 2B denklemler; gerçek yağış ve 73 menfezle, ekran kartında çalışır."],
-            ["Aciliyet", "Dört kademe: acil, yüksek, orta, izle. Okul ve hastaneler bir kademe yukarı alınır."],
-          ].map(([h, p], i) => (
-            <motion.li key={h} variants={item} className="glass flex flex-col gap-1 rounded-2xl p-3 sm:gap-2 sm:p-4">
-              <span className="font-mono text-xs text-ember">0{i + 1}</span>
-              <span className="font-display text-base font-semibold leading-tight sm:text-lg">{h}</span>
-              <span className="text-xs leading-snug text-fg-2 sm:text-[13px]">{p}</span>
-            </motion.li>
-          ))}
-        </motion.ol>
+        <Eyebrow>Çözüm</Eyebrow>
+        <Title>Bul. Simüle et. Sırala.</Title>
+        <Cards
+          numbered
+          items={[
+            ["Gömülü dereyi bul", "Bina ve ağaçlardan arındırılmış yükseklik verisinden suyun gerçek akış yollarını çıkarırız."],
+            [
+              "Seli simüle et",
+              "Gerçek yağışı fizik tabanlı 2B su modeline veririz. Suyun hangi saatte hangi sokağa, kaç metre ulaştığını görürüz.",
+            ],
+            ["Binaları sırala", "Her binaya bir aciliyet kademesi: acil, yüksek, orta, izle. Okul ve hastaneler bir kademe öne alınır."],
+          ]}
+        />
+        <Note>Tamamı açık veriyle; Türkiye&rsquo;nin her yerinde otomatik kurulur.</Note>
       </>
     ),
   },
@@ -206,141 +419,139 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(420, { dx: -260, dy: -260, dz: 110, lookZ: 4 }), depth: 11, rain: 0.6, buried: 0.15, contour: 0.4, ember: 0.8 },
     body: () => (
       <>
-        <Eyebrow n="04">14 Ekim simülasyonu · Sarıyer pilotu</Eyebrow>
-        <Title>Su, 1.427 binanın kapısına geldi.</Title>
-        <motion.div variants={group} className="grid max-w-[860px] grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat value={1427} label="Suyun ulaştığı bina (16.787 bina içinde)" ember />
-          <Stat value={408} label="Su derinliğinin 0,5 m'yi aştığı bina" ember />
-          <Stat value={1366} unit="ha" label="Selin en yaygın anında su altındaki alan" />
-          <Stat raw="15/73" label="Taşan menfez; ilki saat 18:32'de" />
-        </motion.div>
-        <Lead>Su basan binaların çoğu eski dere yataklarının ve haritada olmayan akış koridorlarının üstünde. Aciliyet listesi bu sonuçlardan çıkarılıyor.</Lead>
-      </>
-    ),
-  },
-  {
-    id: "dogrulama",
-    nav: "Doğrulama",
-    mood: { ...riverShot(650, { dx: 220, dy: -420, dz: 260 }), depth: 10, rain: 0.4, buried: 0.2, contour: 0.5, ember: 0.4 },
-    body: () => (
-      <>
-        <Eyebrow n="05">Doğrulama</Eyebrow>
-        <Title>Haberlerdeki su baskınları, modelde de var.</Title>
-        <motion.div variants={item} className="glass max-w-[640px] overflow-hidden rounded-2xl">
-          <table className="w-full text-left text-sm">
-            <tbody>
-              {[
-                ["Hacıosman Metro İstasyonu", "1,91 m"],
-                ["Ayazağa Deresi", "1,42 m"],
-                ["Kemerburgaz Caddesi", "0,66 m"],
-                ["Ayazağa Meydanı", "0,21 m"],
-                ["Haydar Aliyev Caddesi", "0,06 m · kaçırıldı"],
-              ].map(([k, v]) => (
-                <tr key={k} className="border-b border-line last:border-0">
-                  <td className="px-3 py-2 text-[13px] text-fg-2 sm:px-4 sm:py-2.5 sm:text-sm">{k}</td>
-                  <td className="px-3 py-2 text-right font-mono text-[13px] sm:px-4 sm:py-2.5 sm:text-sm">{v}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <Eyebrow>14 Ekim simülasyonu · Sarıyer</Eyebrow>
+        <Title>Su, 3.650 binanın kapısına geldi.</Title>
+        <motion.div variants={group} className={statGrid4}>
+          <Stat value={3650} label="Suyun ulaştığı bina (16.787 bina içinde)" ember />
+          <Stat value={2077} label="Su derinliğinin 0,5 m'yi aştığı bina" ember />
+          <Stat value={128} label="Suyun ulaştığı okul, hastane ve kritik tesis (214 içinde)" />
+          <Stat value={1835} unit="ha" label="0,15 m'yi aşan su altı alanı" />
         </motion.div>
         <Lead>
-          Değerler, haberlerde su basan noktalarda modelin en yüksek su derinliği. 0,5 m eşiğinde 5 noktanın 3’ü isabetli;
-          rastgele bir nokta için bu oran %22. Daha güçlü doğrulama için uydu taşkın haritası gerekiyor.
+          Pilot alana tek günde 7,2 milyon m³ yağmur düştü. Bu liste, ekiplerin sel gelmeden önce hangi sokağa, hangi okula
+          gideceğini söyler.
         </Lead>
       </>
     ),
   },
   {
-    id: "cozucu",
-    nav: "Çözücü",
+    id: "dogrulama",
+    nav: "Kanıt",
+    mood: { ...riverShot(650, { dx: 220, dy: -420, dz: 260 }), depth: 10, rain: 0.4, buried: 0.2, contour: 0.5, ember: 0.4 },
+    body: () => (
+      <>
+        <Eyebrow>Kanıt · 14 Ekim seli</Eyebrow>
+        <Title>14 Ekim&rsquo;e göre kalibre ettik: 9 gözlem noktasının 7&rsquo;si tuttu.</Title>
+        <DataTable
+          head={["Yer", "Gözlenen", "Model"]}
+          numericLast
+          rows={[
+            ["Ayazağa Meydanı", "Restoranda 1,5–2 m", "1,54 m"],
+            ["Dereboyu Caddesi", "Mağazada 1,70 m", "2,76 m"],
+            ["Kemerburgaz Caddesi", "200 kişi mahsur", "2,08 m"],
+            ["Cendere Caddesi", "300 araç mahsur", "2,11 m"],
+            ["Baskının başlaması", "~17:30", "18:10"],
+            ["Akış hızı", "~40 araç sürüklendi", "3,65 m/s"],
+          ]}
+        />
+        <Lead>
+          İki noktayı kaçırdık; orada su metro ve kanalizasyondan geldi, modelde boru ağı yok. Uydu taşkın haritasıyla bağımsız
+          sınama (IoU, yanlış alarm oranı) ilk 6 ayda.
+        </Lead>
+      </>
+    ),
+  },
+  {
+    id: "o-aksam",
+    nav: "Görüntüler",
+    mood: { ...riverShot(-300, { dx: -200, dy: -300, dz: 130, lookZ: 15 }), depth: 6, rain: 1, buried: 0.15, contour: 0.35, ember: 0.3 },
+    body: () => (
+      <>
+        <Eyebrow>14 Ekim akşamı · gerçek görüntüler</Eyebrow>
+        <Title>
+          Modelin su gösterdiği yerler, <span className="text-ember">o akşam.</span>
+        </Title>
+        <motion.div variants={group} className="grid max-w-[1200px] gap-3 md:grid-cols-2 md:gap-4">
+          <FootageCard
+            kind="youtube"
+            id="o5S9h2StcDE"
+            place="Ayazağa · sel sularına kapılan İETT otobüsü"
+            source="Habertürk TV"
+            badge="Model: akış hızı 3,65 m/s"
+          />
+          <FootageCard
+            kind="youtube"
+            id="8dZj6plWY2E"
+            place="Ayazağa · yollar göle döndü, araçlar mahsur"
+            source="İhlas Haber Ajansı"
+            badge="Model: Ayazağa Meydanı 1,54 m"
+          />
+          <FootageCard
+            kind="link"
+            href="https://www.sozcu.com.tr/ayazaga-daki-selden-yeni-goruntuler-19-yillik-magazayi-saniyeler-icinde-sular-yuttu-p371036"
+            place="Dereboyu Caddesi · mağazayı saniyeler içinde su bastı"
+            source="Sözcü"
+            badge="Gözlenen 1,70 m · Model 2,76 m"
+          />
+          <FootageCard
+            kind="link"
+            href="https://www.yenisafak.com/video/gundem/ayazagada-dikkat-ceken-goruntuler-binanin-temelinden-dereboyu-deresinin-gectigi-goruldu-4865065"
+            place="Dereboyu Deresi · binanın temelinin altından akıyor"
+            source="Yeni Şafak"
+            badge="Gömülü dere: problemin kendisi"
+          />
+        </motion.div>
+        <Note>Görüntüler ilgili yayın kuruluşlarına aittir; resmi oynatıcı ya da bağlantı ile gösterilir.</Note>
+      </>
+    ),
+  },
+  {
+    id: "yapay-zeka",
+    nav: "Yapay zekâ",
     mood: { ...riverShot(500, { dx: 0, dy: -60, dz: 1100 }), depth: 9, rain: 0, buried: 0.3, contour: 1, ember: 0.2 },
     body: () => (
       <>
-        <Eyebrow n="06">Fizik</Eyebrow>
-        <Title>HEC-RAS sınıfı denklemler, ekran kartında.</Title>
-        <motion.div variants={group} className="grid max-w-[860px] grid-cols-2 gap-3 lg:grid-cols-4">
-          <Stat raw="10×" label="GPU hızlanması: 30 dk yerine 3 dk" ember />
-          <Stat raw="1:1" label="CPU ve GPU aynı sonucu veriyor" />
-          <Stat raw="10⁻¹⁴" label="Göreli kütle korunumu hatası" />
-          <Stat raw="8/8" label="Analitik testin tamamı geçti: durgun göl, kütle korunumu, baraj yıkılması" />
-        </motion.div>
-        <Lead>HEC-RAS’ın tüm özelliklerini sunmuyoruz; ama çekirdekteki denklemler aynı sınıftan. Farkımız, modelin Türkiye’nin her yerinde açık veriden otomatik olarak kurulması.</Lead>
-      </>
-    ),
-  },
-  {
-    id: "kullanici",
-    nav: "Kim kullanır",
-    mood: { ...riverShot(800, { dx: 380, dy: 320, dz: 300 }), depth: 8, rain: 0.2, buried: 0.3, contour: 0.6, ember: 0.3 },
-    body: () => (
-      <>
-        <Eyebrow n="07">Kim kullanır</Eyebrow>
-        <Title>Haritadan karara.</Title>
-        <Cards
-          items={[
-            ["Belediyeler", "İBB AKOM, İZSU: sınırlı bütçeyle önce hangi koridora, hangi okula müdahale edileceğine karar vermek için."],
-            ["Şirketler ve bankalar", "TSRS 2, sel dahil fiziksel iklim risklerinin raporlanmasını şart koşuyor. Floodograph bu rapora tesis bazında sel riski verisi sağlar."],
-            ["Afet hazırlığı", "Suyun hangi saatte nereye ulaşacağını bilerek tahliye ve ekip planlaması yapmak için."],
-          ]}
-        />
-      </>
-    ),
-  },
-  {
-    id: "gelir",
-    nav: "Gelir modeli",
-    mood: { ...riverShot(700, { dx: -300, dy: 260, dz: 420 }), depth: 6, rain: 0.1, buried: 0.4, contour: 0.8, ember: 0.2 },
-    body: () => (
-      <>
-        <Eyebrow n="08">Gelir modeli</Eyebrow>
+        <Eyebrow>Yapay zekâ ve fizik</Eyebrow>
         <Title>
-          Vatandaşa ücretsiz, <span className="text-ember">kuruma lisanslı.</span>
+          Yapay zekâ veriyi tamamlar, <span className="text-ember">fizik suyu yürütür.</span>
         </Title>
-        <Cards
-          items={[
-            ["Belediye aboneliği", "Şehir başına kurulum ve yıllık lisans: güncel koridor haritası, sel senaryoları, aciliyet listesi."],
-            ["Kurumsal risk verisi", "Sigorta, banka ve şirketlere adres ya da tesis bazında sel riski skoru; API ve TSRS 2 raporu."],
-            ["Ücretsiz açık katman", "Vatandaş kendi sokağının riskini görür; bildirimleri modelin doğrulanmasına geri döner."],
-          ]}
-        />
-      </>
-    ),
-  },
-  {
-    id: "is-birligi",
-    nav: "İş birlikleri",
-    mood: { ...riverShot(850, { dx: 260, dy: -300, dz: 380 }), depth: 7, rain: 0.2, buried: 0.3, contour: 0.7, ember: 0.2 },
-    body: () => (
-      <>
-        <Eyebrow n="09">İş birlikleri</Eyebrow>
-        <Title>Veri sahada, karar kurumda.</Title>
-        <Cards
-          items={[
-            ["Belediye ve su idareleri", "İBB AKOM, İSKİ, İZSU: menfez ve kanal verisiyle modeli kalibre etmek, sonuçları sahada denetlemek."],
-            ["Kamu ve meteoroloji", "AFAD ve MGM: anlık yağış ve tahmin verisiyle önceden uyarı, afet planlarına entegrasyon."],
-            ["Üniversite ve sigorta", "Uydu taşkın haritalarıyla bağımsız doğrulama; sigorta sektörüyle risk fiyatlaması pilotu."],
-          ]}
-        />
-      </>
-    ),
-  },
-  {
-    id: "gelecek",
-    nav: "Gelecek planı",
-    mood: { ...riverShot(250, { dx: 500, dy: 600, dz: 700 }), depth: 4, rain: 0.1, buried: 0.6, contour: 0.9, ember: 0.1 },
-    body: () => (
-      <>
-        <Eyebrow n="10">Gelecek planı</Eyebrow>
-        <Title>Sarıyer’den Türkiye’ye.</Title>
         <Cards
           numbered
           items={[
-            ["0–6 ay", "Uydu taşkın haritasıyla doğrulama; İSKİ menfez verisiyle kalibrasyon; ilk belediye pilotu."],
-            ["6–12 ay", "İzmir ve Ankara saha pilotları; yağış tahminiyle saatler önceden uyarı; mobil bildirim."],
-            ["1–2 yıl", "Türkiye’nin her ilçesinde otomatik kurulum; daha ince ızgarayla sokak ölçeğinde sonuç."],
+            [
+              "Yapay zekâ: binaları bulmak",
+              "Haritada olmayan 4.946 binayı, uydu görüntüsünden derin öğrenmeyle çıkarılmış bina izleri tamamladı (11.841 → 16.787).",
+            ],
+            [
+              "Fizik: suyu yürütmek",
+              "Suyun nereye, ne hızla gittiğini sığ su denklemleri hesaplar. Kural tablosu zamanı veremez; kara kutu model 14 Ekim gibi nadir bir selden öğrenemez.",
+            ],
+            [
+              "Optimizasyon: modeli ayarlamak",
+              "Pürüzlülük, kayıp ve yağış zamanlaması 9 gözlem noktasına göre otomatik tarandı. 30 saatlik sel, ekran kartında 3 dakikada koşuyor.",
+            ],
           ]}
         />
+        <Note>Sırada: radar verisinden yapay zekâyla kısa vadeli yağış tahmini, anlık uyarı için hızlı vekil model.</Note>
+      </>
+    ),
+  },
+  {
+    id: "izmir",
+    nav: "İzmir",
+    mood: { ...riverShot(800, { dx: 380, dy: 320, dz: 300 }), depth: 8, rain: 0.2, buried: 0.3, contour: 0.6, ember: 0.3 },
+    body: () => (
+      <>
+        <Eyebrow>Peki ya İzmir?</Eyebrow>
+        <Title>
+          Aynı yağmur <span className="text-ember">İzmir&rsquo;e düşseydi.</span>
+        </Title>
+        <Lead>
+          Modeli yeni bir ayar yapmadan İzmir merkezine taşıdık. 14 Ekim&rsquo;in 188 mm&rsquo;si İzmir&rsquo;e düşseydi su hangi
+          sokaklara, hangi binalara ulaşırdı? Canlı gösteriyoruz.
+        </Lead>
+        <Note>Senaryo, tahmin değil · İzmir&rsquo;de henüz doğrulanmadı</Note>
+        <IzmirCta />
       </>
     ),
   },
@@ -350,12 +561,159 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(620, { dx: -160, dy: -120, dz: 45, lookZ: 6 }), depth: 13, rain: 0.8, buried: 0.2, contour: 0.4, ember: 1 },
     body: () => (
       <>
-        <Eyebrow n="11">Canlı</Eyebrow>
+        <Eyebrow>Canlı</Eyebrow>
         <Title>Kendiniz görün.</Title>
-        <Lead>
-          İstanbul’da 14 Ekim selinin dere yataklarından taşışını 3B izleyin, serbestçe gezin. Ardından aynı modeli İzmir’de çalıştırın: yağışı siz belirleyin, önce nereye müdahale edileceğini görün.
-        </Lead>
+        <Lead>İstanbul&rsquo;da 14 Ekim selini 3B izleyin. Ardından İzmir&rsquo;de yağışı siz belirleyin.</Lead>
         <Ctas />
+      </>
+    ),
+  },
+  {
+    id: "pazar",
+    nav: "Pazar",
+    mood: { ...riverShot(850, { dx: 260, dy: -300, dz: 380 }), depth: 7, rain: 0.2, buried: 0.3, contour: 0.7, ember: 0.2 },
+    body: () => (
+      <>
+        <Eyebrow>Pazar</Eyebrow>
+        <Title>Türkiye&rsquo;de her yıl sel faturası 100–300 milyon dolar.</Title>
+        {/* nested boxes: global market contains the Turkish municipal market contains our year-3 target */}
+        <Nest
+          levels={[
+            { value: "1,8", unit: "milyar $", label: "Küresel iklim riski analitiği pazarı (2025)" },
+            { value: "180", unit: "milyon ₺/yıl", label: "Türkiye belediyeleri: 30 büyükşehir, 51 il, 922 ilçe" },
+            { value: "7", unit: "milyon ₺/yıl", label: "3. yıl hedefi: 2 büyükşehir, 3 il, 10 ilçe, 5 kurum", ember: true },
+          ]}
+        />
+        <Note>
+          Ayrıca TSRS 2: bankalar ve büyük şirketler sel dahil fiziksel iklim riskini raporlamak zorunda. Kaynak: EM-DAT/DSİ,
+          Fortune BI, KGK.
+        </Note>
+      </>
+    ),
+  },
+  {
+    id: "rakipler",
+    nav: "Rakipler",
+    mood: { ...riverShot(250, { dx: 500, dy: 600, dz: 700 }), depth: 4, rain: 0.1, buried: 0.6, contour: 0.9, ember: 0.1 },
+    body: () => (
+      <>
+        <Eyebrow>Rakipler</Eyebrow>
+        <Title>Herkes bir parçasını yapıyor. Biz uçtan uca.</Title>
+        <DataTable
+          head={["Kim", "Ne yapar", "Eksik kalan"]}
+          rows={[
+            ["Fathom, JBA", "Küresel sel haritası, sigorta verisi", "Yerel olayla kalibrasyon ve belediye iş akışı yok"],
+            ["ICEYE, Floodbase", "Uydudan taşkın tespiti", "Sel olduktan sonra çalışır"],
+            ["HEC-RAS, MIKE + danışman", "Mühendislik modeli", "Aylar ve uzman ister, proje bazlı"],
+            ["DSİ, AFAD haritaları", "Havza taşkın tehlike haritası", "Gömülü dere ve bina aciliyeti yok"],
+          ]}
+        />
+        <motion.p
+          variants={item}
+          className="max-w-[1100px] text-[clamp(16px,min(1.3vw,2.4vh),26px)] font-semibold leading-snug text-ember"
+        >
+          Floodograph: açık veriden otomatik kurulum · gerçek olayla kalibre · bina bazında aciliyet · dakikalar içinde.
+        </motion.p>
+      </>
+    ),
+  },
+  {
+    id: "is-modeli",
+    nav: "İş modeli",
+    mood: { ...riverShot(700, { dx: -300, dy: 260, dz: 420 }), depth: 6, rain: 0.1, buried: 0.4, contour: 0.8, ember: 0.2 },
+    body: () => (
+      <>
+        <Eyebrow>İş modeli</Eyebrow>
+        <Title>
+          Vatandaşa ücretsiz, <span className="text-ember">kuruma lisanslı.</span>
+        </Title>
+        <Cards
+          items={[
+            [
+              "Belediye lisansı",
+              "Kurulum ve yıllık lisans: koridor haritası, yağış senaryoları, aciliyet listesi. Büyükşehir için yıllık 1,5–3 milyon ₺.",
+            ],
+            [
+              "Kurumsal risk verisi",
+              "Sigorta, banka ve TSRS kapsamındaki şirketlere tesis bazında sel skoru ve API. Tesis başına yıllık 5–20 bin ₺.",
+            ],
+            ["Ücretsiz vatandaş katmanı", "Herkes kendi sokağını görür; bildirimleri modelin doğrulanmasına geri döner."],
+          ]}
+        />
+        <Note>Fiyatlar varsayım; ilk pilotta doğrulanacak.</Note>
+      </>
+    ),
+  },
+  {
+    id: "strateji",
+    nav: "Pazara giriş",
+    mood: { ...riverShot(-700, { dx: -650, dy: -700, dz: 520 }), depth: 3, rain: 0.1, buried: 0.5, contour: 0.6, ember: 0 },
+    body: () => (
+      <>
+        <Eyebrow>Pazara giriş</Eyebrow>
+        <Title>Önce selin yaşandığı şehir.</Title>
+        <Cards
+          numbered
+          items={[
+            [
+              "İBB · AKOM ve İSKİ",
+              "6 aylık pilot. Karşılığında menfez ve kanal verisi, sonuçları sahada birlikte denetleriz, ardından yıllık lisans.",
+            ],
+            ["İzmir · İZSU", "İzmir senaryosu görüşmenin kapısını açar; ikinci şehir."],
+            ["Kurumsal kanal", "Kamu ihalesi uzun sürer; bu sürede TSRS raporlaması yapan banka ve şirketlerden gelir."],
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: "yol-haritasi",
+    nav: "Yol haritası",
+    mood: { ...riverShot(250, { dx: 500, dy: 600, dz: 700 }), depth: 4, rain: 0.1, buried: 0.6, contour: 0.9, ember: 0.1 },
+    body: () => (
+      <>
+        <Eyebrow>Yol haritası</Eyebrow>
+        <Title>Sarıyer&rsquo;den Türkiye&rsquo;ye.</Title>
+        <Cards
+          numbered
+          items={[
+            ["0–6 ay", "Uydu taşkın haritasıyla bağımsız doğrulama ve hidroloji uzmanı görüşü. Ticari lisanslı yükseklik verisi. İBB pilot görüşmesi, şirketleşme."],
+            ["6–12 ay", "Boru ağı verisiyle kalibrasyon. İzmir'de gerçek bir olayla sınama. Meteoroloji tahminiyle saatler önceden uyarı."],
+            [
+              "1–2 yıl",
+              "Türkiye'nin her ilçesinde otomatik kurulum. Gömülü dere koridorları, dere ıslahı ve yeşil altyapı planlamasına veri olarak sunulur.",
+            ],
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: "riskler",
+    nav: "Riskler",
+    mood: { ...riverShot(300, { dx: -900, dy: -1100, dz: 950 }), depth: 2.5, rain: 0, buried: 0.7, contour: 0.7, ember: 0 },
+    body: () => (
+      <>
+        <Eyebrow>Riskler ve sınırlar</Eyebrow>
+        <Title>Neyi bilmediğimizi de söylüyoruz.</Title>
+        <Cards
+          cols={2}
+          items={[
+            [
+              "Yanlış alarm ve kaçırma",
+              "Kaçırılan sel can kaybı, gereksiz alarm güven kaybıdır. Yanlış alarm oranı ve IoU henüz ölçülmedi; uydu verisiyle ölçülecek.",
+            ],
+            [
+              "Tek olayla kalibrasyon",
+              "Model 14 Ekim'in 9 noktasına göre ayarlandı, başka bir selde sınanmadı. Boru ağı olmadığı için kanalizasyondan gelen suyu göremez.",
+            ],
+            [
+              "KVKK ve hukuk",
+              "Kişisel veri işlemiyoruz. Bina bazlı risk konut değerini etkileyebilir; ayrıntı kurumla paylaşılır. FABDEM ticari kullanıma kapalı, ticari sürümde lisanslı veri.",
+            ],
+            ["Resmi harita değil", "Pilot çalışma. Resmi sel risk haritasının ve uyarı sisteminin yerine geçmez, onları besler."],
+          ]}
+        />
       </>
     ),
   },
@@ -365,40 +723,48 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(300, { dx: -900, dy: -1100, dz: 950 }), depth: 2.5, rain: 0, buried: 0.7, contour: 0.7, ember: 0 },
     body: () => (
       <>
-        <Eyebrow n="12">Takım SALU</Eyebrow>
+        <Eyebrow>Takım SALU</Eyebrow>
         <Title>
           Bilgisayar bilimi, görüntü işleme, otomasyon. <span className="text-ember">Tek hedef: seli önceden görmek.</span>
         </Title>
         <motion.ul variants={group} className="flex flex-wrap gap-3">
           {["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"].map((n) => (
-            <motion.li key={n} variants={item} className="glass rounded-2xl px-4 py-2.5 font-display text-base font-semibold sm:px-5 sm:py-3 sm:text-lg">
+            <motion.li
+              key={n}
+              variants={item}
+              className="glass rounded-2xl px-5 py-3 font-display text-[clamp(18px,min(1.5vw,2.6vh),28px)] font-bold sm:px-6 sm:py-3.5"
+            >
               {n}
             </motion.li>
           ))}
         </motion.ul>
-        <motion.p variants={item} className="max-w-[640px] text-sm leading-relaxed text-fg-2">
-          <span className="text-fg">Sınırlamalar:</span> 20 m ızgara, tahmini menfez kapasiteleri; resmi risk haritası değildir.
-          Veri: FABDEM CC BY-NC-SA, OSM ve Overture ODbL.
+        <motion.p variants={item} className="max-w-[62ch] text-[clamp(16px,min(1.05vw,1.9vh),20px)] leading-relaxed text-fg-2">
+          <span className="font-semibold text-fg">Sınırlamalar:</span> Veri: FABDEM CC BY-NC-SA, OSM ve Overture ODbL, ERA5, İBB
+          istasyon verisi.
         </motion.p>
       </>
     ),
   },
   {
-    id: "tesekkurler",
-    nav: "Teşekkürler",
+    id: "kapanis",
+    nav: "Çağrı",
     mood: { ...riverShot(-700, { dx: -650, dy: -700, dz: 520 }), depth: 3, rain: 0.1, buried: 0.5, contour: 0.6, ember: 0 },
     body: () => (
       <>
-        <motion.div variants={item} className="flex items-center gap-3">
-          <Image src="/icon.png" alt="" width={40} height={40} />
-          <span className="font-display text-2xl font-bold tracking-[-0.02em]">floodograph</span>
-        </motion.div>
-        <Title className="text-[clamp(40px,min(8vw,12vh),120px)]">
+        <Eyebrow>Çağrımız</Eyebrow>
+        <Title>İlk pilot belediyemizi arıyoruz.</Title>
+        <Lead>
+          Bir belediye, bir dere havzası, bir yağmur sezonu. Bize menfez ve kanal verisini verin; size o şehrin ilk güncel sel
+          koridoru haritasını verelim.
+        </Lead>
+        <motion.p
+          variants={item}
+          className="font-display text-[clamp(36px,min(6vw,9.5vh),104px)] font-extrabold leading-none tracking-[-0.035em]"
+        >
           Teşekkürler<span className="text-ember">.</span>
-        </Title>
-        <Lead>Dinlediğiniz için teşekkür ederiz. Sorularınızı bekliyoruz.</Lead>
+        </motion.p>
         <Ctas />
-        <motion.p variants={item} className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-sm text-fg-2">
+        <motion.p variants={item} className="flex flex-wrap gap-x-4 gap-y-1 text-[clamp(15px,min(1.1vw,2vh),20px)] text-fg-2">
           <span>EkoZeka 2026 · Takım SALU</span>
           <a
             href="https://github.com/atakanclskn/floodograph"
@@ -420,6 +786,16 @@ export function Deck() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const backdrop = useRef<Backdrop | null>(null);
   const lock = useRef(0);
+  const [video, setVideo] = useState<string | null>(null);
+  const videoOpen = useRef(false); // read by the key/wheel/touch handlers, which live in a long-lived effect
+  const openVideo = useCallback((id: string) => {
+    videoOpen.current = true;
+    setVideo(id);
+  }, []);
+  const closeVideo = useCallback(() => {
+    videoOpen.current = false;
+    setVideo(null);
+  }, []);
   const linked = useRef<string | null>(null); // the #slide the page was opened with
   const reduce = useReducedMotion() ?? false;
   const n = SLIDES.length;
@@ -527,6 +903,7 @@ export function Deck() {
   // keyboard, wheel, touch
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (videoOpen.current) return; // the player dialog owns the keyboard (Esc closes it natively)
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
       if (["ArrowDown", "PageDown", "ArrowRight"].includes(e.key) || (e.key === " " && !e.shiftKey)) {
@@ -541,6 +918,7 @@ export function Deck() {
     let acc = 0;
     let accT = 0;
     const onWheel = (e: WheelEvent) => {
+      if (videoOpen.current) return;
       const sc = (e.target as Element | null)?.closest?.("[data-deck-scroll]") as HTMLElement | null;
       if (sc && Math.abs(e.deltaY) > 0) {
         const more = e.deltaY > 0 ? sc.scrollTop + sc.clientHeight < sc.scrollHeight - 1 : sc.scrollTop > 1;
@@ -565,6 +943,10 @@ export function Deck() {
     let atTop = true;
     let atBottom = true;
     const onStart = (e: TouchEvent) => {
+      if (videoOpen.current) {
+        y0 = null; // onEnd ignores a gesture that started while the player was open
+        return;
+      }
       y0 = e.touches[0]?.clientY ?? null;
       x0 = e.touches[0]?.clientX ?? 0;
       scrollable = (e.target as Element | null)?.closest?.("[data-deck-scroll]") ?? null;
@@ -599,7 +981,8 @@ export function Deck() {
   const last = idx === n - 1;
 
   return (
-    <div className="fixed inset-0 touch-pinch-zoom overflow-hidden overscroll-none bg-ink">
+    // Deck-only fonts: remap the site's display/sans variables on this subtree, the rest of the site is untouched.
+    <div className="fixed inset-0 touch-pinch-zoom overflow-hidden overscroll-none bg-ink font-sans [--font-bricolage:var(--font-deck-display)] [--font-geist-sans:var(--font-deck-body)]">
       <canvas ref={canvas} className="absolute inset-0 h-full w-full" aria-hidden="true" />
       {/* legibility scrim: content sits on the left */}
       <div
@@ -610,13 +993,13 @@ export function Deck() {
       <header className="absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center justify-between sm:left-[max(2rem,env(safe-area-inset-left))] sm:right-[max(2rem,env(safe-area-inset-right))]">
         <button type="button" onClick={() => go(0)} className="glass flex items-center gap-2.5 rounded-2xl py-2 pl-2.5 pr-4">
           <Image src="/icon.png" alt="" width={26} height={26} />
-          <span className="font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
+          <span className="font-display text-[clamp(16px,1.1vw,20px)] font-extrabold tracking-[-0.02em]">floodograph</span>
         </button>
         <div className="flex items-center gap-2">
-          <Link href="/izmir" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center rounded-xl px-4 text-sm font-semibold sm:inline-flex">
+          <Link href="/izmir" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center rounded-xl px-4 text-base font-semibold sm:inline-flex">
             İzmir
           </Link>
-          <Link href="/sinema" transitionTypes={["nav-forward"]} className="btn-ember inline-flex min-h-11 items-center gap-2 rounded-xl bg-ember px-4 text-sm font-semibold text-ink">
+          <Link href="/sinema" transitionTypes={["nav-forward"]} className="btn-ember inline-flex min-h-11 items-center gap-2 rounded-xl bg-ember px-4 text-base font-semibold text-ink">
             <Play />
             İstanbul
           </Link>
@@ -644,7 +1027,7 @@ export function Deck() {
               }),
             }}
             data-deck-scroll
-            className="flex max-h-full w-full max-w-[1100px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none] data-[more=1]:[mask-image:linear-gradient(to_bottom,black_calc(100%_-_40px),transparent)]"
+            className="flex max-h-full w-full max-w-[1280px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none] data-[more=1]:[mask-image:linear-gradient(to_bottom,black_calc(100%_-_40px),transparent)]"
           >
             <motion.div
               variants={group}
@@ -652,7 +1035,7 @@ export function Deck() {
               animate="show"
               onAnimationComplete={() => document.dispatchEvent(new Event("deck-settled"))}
               className="flex flex-col gap-4 sm:gap-6 [@media(max-height:720px)]:gap-3">
-              {slide.body()}
+              <OpenVideo.Provider value={openVideo}>{slide.body()}</OpenVideo.Provider>
             </motion.div>
           </motion.section>
         </AnimatePresence>
@@ -669,7 +1052,7 @@ export function Deck() {
             aria-current={i === idx ? "step" : undefined}
             className="group flex items-center justify-end gap-3"
           >
-            <span className={`font-mono text-xs transition-opacity duration-200 ${i === idx ? "text-fg opacity-100" : "text-fg-3 opacity-0 group-hover:opacity-100"}`}>
+            <span className={`text-[clamp(14px,1vw,18px)] font-medium transition-opacity duration-200 ${i === idx ? "text-fg opacity-100" : "text-fg-3 opacity-0 group-hover:opacity-100"}`}>
               {s.nav}
             </span>
             <span
@@ -703,10 +1086,12 @@ export function Deck() {
             <path d="M8 3v10M4 9l4 4 4-4" />
           </motion.svg>
         </button>
-        <span className="font-mono text-[11px] text-fg-3">
+        <span className="font-mono text-[clamp(13px,0.9vw,16px)] text-fg-3 [font-variant-numeric:tabular-nums]">
           {String(idx + 1).padStart(2, "0")} / {String(n).padStart(2, "0")}
         </span>
       </div>
+
+      <VideoDialog id={video} onClose={closeVideo} />
     </div>
   );
 }
