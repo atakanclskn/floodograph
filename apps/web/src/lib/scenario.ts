@@ -4,7 +4,7 @@ import type { RainPoint, Scenario } from "@floodograph/core";
 export const SCENARIO_ID = "istanbul-2026-10-14";
 export const CITY_ID = "istanbul";
 
-export const RAIN_SOURCE_NOTE = "Yağış: Open-Meteo saatlik deseni, Sarıyer istasyonunun 188 mm toplamına ölçekli ve gözlemlere göre kalibre";
+export const RAIN_SOURCE_NOTE = "Yağış: Open-Meteo saatlik deseni, Sarıyer istasyonunun 188 kg/m² toplamına ölçekli ve gözlemlere göre kalibre";
 
 /** Building wet threshold used by the simulator (summary.params.wet_threshold_m). */
 export const WET_THRESHOLD_M = 0.15;

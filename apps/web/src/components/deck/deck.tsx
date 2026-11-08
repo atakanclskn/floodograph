@@ -306,7 +306,7 @@ function FinalCtas() {
         transitionTypes={["nav-forward"]}
         className={`glass transition-colors duration-150 hover:bg-white/10 ${ctaBase}`}
       >
-        İzmir · 188 mm
+        İzmir · 188 kg/m²
       </Link>
     </motion.div>
   );
@@ -344,7 +344,7 @@ const SLIDES: Slide[] = [
           <Eyebrow>14 Ekim 2026 · İstanbul</Eyebrow>
           <Title className="text-[clamp(30px,min(3.5vw,6.4vh),64px)]">Saat 17:30. Ayazağa&rsquo;da cadde bir nehre döndü.</Title>
           <Lead>
-            Tek günde 188 mm yağmur. 200 kişi mahsur kaldı, araçlar ve bir İETT otobüsü sürüklendi. Suyun nereden geçeceğini gösteren
+            Tek günde 188 kg/m² yağmur. 200 kişi mahsur kaldı, araçlar ve bir İETT otobüsü sürüklendi. Suyun nereden geçeceğini gösteren
             bir harita yoktu.
           </Lead>
         </motion.div>

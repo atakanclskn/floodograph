@@ -109,9 +109,9 @@ type Row = { id: number; name: string; tag: string | null; depth: number; wm: nu
 const GENERIC = new Set(Object.values(CRIT_LABEL));
 /** The lowest simulated rain total: below it the reach is extrapolated from 0 mm, so never quote a number there. */
 const FIRST_LEVEL_MM = 25;
-/** "~120 mm'de su ulaşır" (rounded to 5 mm: levels are 25-50 mm apart), or "25 mm'nin altında bile …". */
+/** Rain is shown in kg/m² (= mm, litres per m²), the unit Turkish forecasts use. "~120 kg/m²'de su ulaşır" (rounded to 5 mm: levels are 25-50 mm apart), or "25 mm'nin altında bile …". */
 function reachText(mm: number): string {
-  return mm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} mm'nin altında bile su ulaşır` : `~${fmtInt(Math.round(mm / 5) * 5)} mm'de su ulaşır`;
+  return mm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} kg/m²'nin altında bile su ulaşır` : `~${fmtInt(Math.round(mm / 5) * 5)} kg/m²'de su ulaşır`;
 }
 
 /** Name of the street nearest to a point (within ~100 m), from the basemap's road-name lines. */
@@ -714,7 +714,7 @@ export function CityFlood() {
                 {sel.wm <= mm ? `${fmtDec(selDepth)} m` : "yok"}
               </dd>
               <dt className="text-fg-3">Suyun ulaştığı yağış</dt>
-              <dd className="font-mono tabular-nums">{sel.wm < NEVER ? (sel.wm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} mm'nin altında` : `~${fmtInt(Math.round(sel.wm / 5) * 5)} mm`) : `${fmtInt(topMm)} mm'ye kadar kuru`}</dd>
+              <dd className="font-mono tabular-nums">{sel.wm < NEVER ? (sel.wm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} kg/m²'nin altında` : `~${fmtInt(Math.round(sel.wm / 5) * 5)} kg/m²`) : `${fmtInt(topMm)} kg/m²'ye kadar kuru`}</dd>
               <dt className="text-fg-3">Yükseklik</dt>
               <dd className="font-mono tabular-nums">{fmtInt(sel.h)} m</dd>
             </dl>
@@ -723,7 +723,7 @@ export function CityFlood() {
 
         {status === "ready" && stats ? (
           <dl className="grid grid-cols-2 gap-3">
-            <Stat label="Yağış" value={`${fmtInt(mm)} mm`} />
+            <Stat label="Yağış" value={`${fmtInt(mm)} kg/m²`} />
             <Stat label="Su altındaki alan" value={areaHa == null ? "…" : `${fmtInt(areaHa)} ha`} accent />
             <Stat label="Suya giren bina" value={fmtInt(stats.wet)} accent />
             <Stat label="Kritik tesis" value={fmtInt(stats.crit)} />
@@ -795,7 +795,7 @@ export function CityFlood() {
           </label>
           <span className="font-mono text-2xl font-medium tabular-nums">
             {fmtInt(mm)}
-            <span className="ml-1 text-sm text-fg-3">mm</span>
+            <span className="ml-1 text-sm text-fg-3">kg/m²</span>
           </span>
         </div>
         <input
@@ -807,7 +807,7 @@ export function CityFlood() {
           step={5}
           value={mm}
           onChange={(e) => setMm(Number(e.target.value))}
-          aria-valuetext={`${mm} milimetre`}
+          aria-valuetext={`metrekareye ${mm} kilogram`}
         />
         <div className="flex flex-wrap gap-1.5">
           {PRESETS.map((p) => (
@@ -818,7 +818,7 @@ export function CityFlood() {
               aria-pressed={mm === p.mm}
               className={`min-h-9 rounded-lg px-3 text-xs font-medium transition-colors duration-150 ${mm === p.mm ? "bg-white/15 text-fg" : "text-fg-3 hover:bg-white/10 hover:text-fg"}`}
             >
-              {p.label} · {p.mm} mm
+              {p.label} · {p.mm} kg/m²
             </button>
           ))}
         </div>
