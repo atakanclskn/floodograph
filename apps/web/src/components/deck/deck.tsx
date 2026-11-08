@@ -37,7 +37,7 @@ function Title({ children, className = "" }: { children: React.ReactNode; classN
   return (
     <motion.h2
       variants={item}
-      className={`font-display text-[clamp(30px,min(4.6vw,8vh),84px)] font-extrabold leading-[1.02] tracking-[-0.035em] [text-wrap:balance] ${className}`}
+      className={`font-display text-[clamp(30px,min(4.6vw,8vh),84px)] font-extrabold leading-[1.02] tracking-[-0.02em] [text-wrap:balance] ${className}`}
     >
       {children}
     </motion.h2>
@@ -207,12 +207,22 @@ function WatchButton({ id, children }: { id: string; children: React.ReactNode }
 }
 
 /**
- * Inline player for the 14-ekim slide. It is only in the DOM while the slide is mounted (Deck renders one slide at a
+ * Inline player (14-ekim: 16:9, problem: 9:16 Shorts). It is only in the DOM while the slide is mounted (Deck renders one slide at a
  * time), so leaving the slide removes the iframe and the video stops. Underneath the iframe sits a thumbnail + play
  * link; with no network the iframe is not rendered at all and that fallback shows. Muted autoplay: sound and
  * fullscreen are the YouTube controls.
  */
-function LiveVideo() {
+type LiveVideoProps = {
+  id: string;
+  title: string;
+  caption: string;
+  /** "16/9" (default) fills the column width; "9/16" is a tall Shorts box sized by viewport height. */
+  aspect?: "16/9" | "9/16";
+  /** Extra embed query params appended to the base ones (e.g. loop). */
+  extra?: string;
+};
+function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVideoProps) {
+  const tall = aspect === "9/16";
   const [online, setOnline] = useState(true);
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);
@@ -225,10 +235,14 @@ function LiveVideo() {
     };
   }, []);
   return (
-    <motion.figure variants={item} className="flex w-full min-w-0 flex-col gap-3">
-      <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[#141d22] shadow-2xl ring-1 ring-white/10">
+    <motion.figure variants={item} className={`flex min-w-0 flex-col gap-3 ${tall ? "w-fit max-w-full" : "w-full"}`}>
+      <div
+        className={`relative overflow-hidden rounded-2xl bg-[#141d22] shadow-2xl ring-1 ring-white/10 ${
+          tall ? "aspect-[9/16] h-[60vh] max-w-full md:h-[70vh]" : "aspect-video w-full"
+        }`}
+      >
         <a
-          href={`https://www.youtube.com/watch?v=${VIDEO_AYAZAGA}`}
+          href={`https://www.youtube.com/watch?v=${id}`}
           target="_blank"
           rel="noopener"
           aria-label="Videoyu YouTube'da aç"
@@ -236,7 +250,7 @@ function LiveVideo() {
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src={`https://i.ytimg.com/vi/${VIDEO_AYAZAGA}/hqdefault.jpg`}
+            src={`https://i.ytimg.com/vi/${id}/hqdefault.jpg`}
             alt=""
             onError={(e) => {
               e.currentTarget.style.display = "none";
@@ -251,8 +265,8 @@ function LiveVideo() {
         </a>
         {online && (
           <iframe
-            src={`https://www.youtube-nocookie.com/embed/${VIDEO_AYAZAGA}?autoplay=1&mute=1&rel=0&playsinline=1&modestbranding=1`}
-            title="14 Ekim, Ayazağa: Habertürk TV görüntüsü"
+            src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&rel=0&playsinline=1${extra}`}
+            title={title}
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen
             referrerPolicy="strict-origin-when-cross-origin"
@@ -260,7 +274,8 @@ function LiveVideo() {
           />
         )}
       </div>
-      <figcaption className="text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3">Habertürk TV · 14 Ekim, Ayazağa</figcaption>
+      {/* w-0 + min-w-full: the caption wraps to the video's width instead of widening a tall box */}
+      <figcaption className="w-0 min-w-full text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3">{caption}</figcaption>
     </motion.figure>
   );
 }
@@ -363,7 +378,12 @@ const SLIDES: Slide[] = [
             bir harita yoktu.
           </Lead>
         </motion.div>
-        <LiveVideo />
+        <LiveVideo
+          id={VIDEO_AYAZAGA}
+          title="14 Ekim, Ayazağa: Habertürk TV görüntüsü"
+          caption="Habertürk TV · 14 Ekim, Ayazağa"
+          extra="&modestbranding=1"
+        />
       </div>
     ),
   },
@@ -372,27 +392,26 @@ const SLIDES: Slide[] = [
     nav: "Problem",
     mood: { ...riverShot(-120, { dx: -40, dy: -120, dz: 850 }), depth: 3, rain: 0, buried: 1, contour: 0.85, ember: 0 },
     body: () => (
-      <>
-        <Eyebrow>Problem</Eyebrow>
-        <Title>
-          Dereyi betonla örttük. <span className="text-ember">Su, yolunu unutmadı.</span>
-        </Title>
-        <Lead>Üstü kapatılan dere haritadan silinir, eğim yerinde kalır. Kuvvetli yağışta su eski yatağına döner.</Lead>
-        <motion.div variants={group} className="grid max-w-[900px] grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-          <Stat value={59} label="Pilot bölgede arazide olup haritada olmayan akış koridoru (32,5 km)" ember />
-          <Stat value={3706} label="İstanbul genelinde bulduğumuz akış koridoru" />
+      <div className="grid items-center gap-6 md:grid-cols-[minmax(0,1fr)_auto] md:gap-10">
+        <motion.div variants={group} className="flex flex-col gap-4 sm:gap-6 [@media(max-height:720px)]:gap-3">
+          <Eyebrow>Problem</Eyebrow>
+          <Title>
+            Dereyi betonla örttük. <span className="text-ember">Su, yolunu unutmadı.</span>
+          </Title>
+          <Lead>Üstü kapatılan dere haritadan silinir, eğim yerinde kalır. Kuvvetli yağışta su eski yatağına döner.</Lead>
+          <motion.div variants={group} className="grid max-w-[900px] grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
+            <Stat value={59} label="Pilot bölgede arazide olup haritada olmayan akış koridoru (32,5 km)" ember />
+            <Stat value={3706} label="İstanbul genelinde bulduğumuz akış koridoru" />
+          </motion.div>
         </motion.div>
-        <motion.p variants={item} className="text-[clamp(15px,min(1.05vw,1.9vh),20px)]">
-          <a
-            href="https://www.yenisafak.com/video/gundem/ayazagada-dikkat-ceken-goruntuler-binanin-temelinden-dereboyu-deresinin-gectigi-goruldu-4865065"
-            target="_blank"
-            rel="noopener"
-            className="text-fg-2 underline decoration-line underline-offset-4 hover:text-fg"
-          >
-            ↗ Dereboyu Deresi bir binanın temelinin altından akıyor (Yeni Şafak)
-          </a>
-        </motion.p>
-      </>
+        <LiveVideo
+          id="Lm_YAwsHXLQ"
+          title="Maltepe TV: apartmanların altından dere akıyor"
+          caption="Maltepe TV · Apartmanların altından dere akıyor"
+          aspect="9/16"
+          extra="&loop=1&playlist=Lm_YAwsHXLQ"
+        />
+      </div>
     ),
   },
   {
@@ -402,13 +421,15 @@ const SLIDES: Slide[] = [
     body: () => (
       <>
         <Eyebrow>Çözüm</Eyebrow>
-        <Title>Bul. Simüle et. Sırala.</Title>
+        <Title>
+          Dereyi bul, seli oynat, <span className="text-ember">binayı sırala.</span>
+        </Title>
         <Cards
           numbered
           items={[
-            ["Bul", "Yükseklik verisinden suyun gerçek akış yolları; haritada olmayan dere de içinde."],
-            ["Simüle et", "Gerçek yağış, fizik tabanlı 2B su modeli: hangi saatte, hangi sokakta, kaç metre."],
-            ["Sırala", "Her binaya aciliyet kademesi; okul ve hastaneler öne alınır."],
+            ["Gömülü dereyi buluruz", "Yükseklik verisinden suyun gerçek akış yollarını çıkarırız. Haritada olmayan dereler de bu yolların içinde."],
+            ["Seli saat saat oynatırız", "Gerçek yağışı fizik tabanlı bir su modeline veririz. Suyun hangi saatte, hangi sokakta, kaç metreye çıktığını görürüz."],
+            ["Binaları sıralarız", "Her binaya bir aciliyet kademesi veririz. Okullar ve hastaneler listenin başına geçer."],
           ]}
         />
       </>
@@ -457,9 +478,9 @@ const SLIDES: Slide[] = [
         </Title>
         <Cards
           items={[
-            ["Yapay zekâ", "Uydudan derin öğrenmeyle çıkarılmış bina izleri, haritada olmayan 4.946 binayı ekledi."],
-            ["Fizik", "Suyun yolu ve hızı sığ su denklemleriyle. Kara kutu model, nadir bir selden öğrenemez."],
-            ["Hız", "30 saatlik sel, ekran kartında 3 dakikada."],
+            ["Yapay zekâ", "Uydu görüntüsünden derin öğrenmeyle çıkarılan bina izleri, haritada olmayan 4.946 binayı tamamladı."],
+            ["Fizik", "Suyun yolunu ve hızını sığ su denklemleri hesaplar. Kara kutu bir model, bu kadar nadir bir selden öğrenemez."],
+            ["Hız", "30 saatlik bir seli ekran kartında 3 dakikada hesaplıyoruz."],
           ]}
         />
       </>
@@ -520,9 +541,9 @@ const SLIDES: Slide[] = [
         <Cards
           numbered
           items={[
-            ["0–6 ay · İBB pilotu", "AKOM ve İSKİ ile 6 aylık pilot. Uydu verisiyle bağımsız doğrulama, hidroloji uzmanı görüşü."],
-            ["6–12 ay · İlk lisans", "Belediye yıllık lisansı, büyükşehir için 1,5–3 milyon ₺. İkinci şehir İzmir."],
-            ["1–2 yıl · Ölçek", "Her ilçede otomatik kurulum. Banka ve sigortaya tesis bazında sel riski (TSRS 2)."],
+            ["0–6 ay · İBB pilotu", "AKOM ve İSKİ ile 6 aylık pilot. Modeli uydu verisiyle bağımsız olarak sınar, hidroloji uzmanı görüşü alırız."],
+            ["6–12 ay · İlk lisans", "Belediyeler yıllık lisans öder; büyükşehir için 1,5–3 milyon ₺. İkinci şehrimiz İzmir."],
+            ["1–2 yıl · Ölçek", "Model her ilçeye otomatik kurulur. Bankalar ve sigortalar tesis bazında sel riski verisi alır (TSRS 2)."],
           ]}
         />
         <Note>Fiyatlar varsayım; pilotta doğrulanacak.</Note>
@@ -540,7 +561,7 @@ const SLIDES: Slide[] = [
         <motion.ul variants={group} className="flex max-w-[1100px] flex-col">
           {[
             "Tek olayla kalibre edildi; yanlış alarm oranı ve IoU henüz ölçülmedi.",
-            "Boru ağı yok: kanalizasyondan gelen suyu göremez.",
+            "Modelde boru ağı yok; kanalizasyondan gelen suyu göremiyor.",
             "Kişisel veri işlemiyoruz; bina bazlı risk yalnız kurumla paylaşılır. FABDEM ticari kullanıma kapalı.",
             "Resmi sel risk haritası değildir; onu besler.",
           ].map((t) => (
@@ -581,7 +602,7 @@ const SLIDES: Slide[] = [
         </Lead>
         <motion.p
           variants={item}
-          className="font-display text-[clamp(36px,min(5.4vw,8.6vh),96px)] font-extrabold leading-none tracking-[-0.035em]"
+          className="font-display text-[clamp(36px,min(5.4vw,8.6vh),96px)] font-extrabold leading-none tracking-[-0.02em]"
         >
           Teşekkürler<span className="text-ember">.</span>
         </motion.p>
