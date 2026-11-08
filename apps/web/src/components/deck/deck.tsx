@@ -411,8 +411,8 @@ const SLIDES: Slide[] = [
         <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-8">
           <div className="flex min-w-0 flex-col gap-3 lg:gap-4">
             <motion.div variants={group} className="grid grid-cols-2 gap-3">
-              <Stat small value={3650} label="Suyun ulaştığı bina" ember />
-              <Stat small value={128} label="Suyun ulaştığı okul, hastane ve kritik tesis" />
+              <Stat small value={3650} label="Su baskını olan bina" ember />
+              <Stat small value={128} label="Su baskını olan okul, hastane ve kritik tesis" />
             </motion.div>
             <DataTable
               head={["Yer", "Gözlenen", "Model"]}
