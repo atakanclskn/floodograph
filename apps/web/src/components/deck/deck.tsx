@@ -31,7 +31,7 @@ function Title({ children, className = "" }: { children: React.ReactNode; classN
   return (
     <motion.h2
       variants={item}
-      className={`font-display text-[clamp(28px,min(6vw,9vh),88px)] font-semibold leading-[0.95] tracking-[-0.035em] [text-wrap:balance] ${className}`}
+      className={`font-display text-[clamp(28px,min(4.8vw,7.5vh),72px)] font-semibold leading-[1] tracking-[-0.035em] [text-wrap:balance] ${className}`}
     >
       {children}
     </motion.h2>
@@ -52,6 +52,19 @@ function Stat({ value, unit, label, ember = false, raw }: { value?: number; unit
         {unit && <span className="ml-1.5 text-[0.45em] font-normal tracking-normal text-fg-3">{unit}</span>}
       </p>
       <p className="text-xs leading-snug text-fg-2 sm:text-sm">{label}</p>
+    </motion.div>
+  );
+}
+function Cards({ items, numbered = false }: { items: string[][]; numbered?: boolean }) {
+  return (
+    <motion.div variants={group} className="grid max-w-[960px] gap-2 md:grid-cols-3 md:gap-3">
+      {items.map(([h, p], i) => (
+        <motion.div key={h} variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
+          {numbered && <span className="font-mono text-xs text-ember">0{i + 1}</span>}
+          <span className="font-display text-lg font-semibold leading-tight sm:text-xl">{h}</span>
+          <span className="text-[13px] leading-relaxed text-fg-2 sm:text-sm">{p}</span>
+        </motion.div>
+      ))}
     </motion.div>
   );
 }
@@ -105,7 +118,7 @@ const SLIDES: Slide[] = [
           <Image src="/icon.png" alt="" width={40} height={40} priority />
           <span className="font-display text-2xl font-bold tracking-[-0.02em]">floodograph</span>
         </motion.div>
-        <Title className="text-[clamp(32px,min(7.4vw,11vh),112px)]">
+        <Title className="text-[clamp(32px,min(6.4vw,9.5vh),96px)]">
           Su yolunu her zaman bulur. <span className="text-ember">Biz ondan önce buluruz.</span>
         </Title>
         <Lead>
@@ -233,9 +246,8 @@ const SLIDES: Slide[] = [
           </table>
         </motion.div>
         <Lead>
-          Tablodaki değerler, haberlerde su bastığı bildirilen noktalarda modelin hesapladığı en yüksek su derinliği. 0,5 m
-          eşiğiyle 5 noktanın 3’ü isabetli; rastgele seçilen bir noktanın bu eşiği aşma olasılığı ise %22. Yine de beş nokta
-          güçlü bir doğrulama için az: yanlış alarm oranını ve IoU’yu ölçmek için uydu taşkın haritası gerekiyor.
+          Değerler, haberlerde su basan noktalarda modelin en yüksek su derinliği. 0,5 m eşiğinde 5 noktanın 3’ü isabetli;
+          rastgele bir nokta için bu oran %22. Daha güçlü doğrulama için uydu taşkın haritası gerekiyor.
         </Lead>
       </>
     ),
@@ -266,18 +278,70 @@ const SLIDES: Slide[] = [
       <>
         <Eyebrow n="07">Kim kullanır</Eyebrow>
         <Title>Haritadan karara.</Title>
-        <motion.div variants={group} className="grid max-w-[960px] gap-2 md:grid-cols-3 md:gap-3">
-          {[
+        <Cards
+          items={[
             ["Belediyeler", "İBB AKOM, İZSU: sınırlı bütçeyle önce hangi koridora, hangi okula müdahale edileceğine karar vermek için."],
             ["Şirketler ve bankalar", "TSRS 2, sel dahil fiziksel iklim risklerinin raporlanmasını şart koşuyor. Floodograph bu rapora tesis bazında sel riski verisi sağlar."],
             ["Afet hazırlığı", "Suyun hangi saatte nereye ulaşacağını bilerek tahliye ve ekip planlaması yapmak için."],
-          ].map(([h, p]) => (
-            <motion.div key={h} variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
-              <span className="font-display text-lg font-semibold sm:text-xl">{h}</span>
-              <span className="text-[13px] leading-relaxed text-fg-2 sm:text-sm">{p}</span>
-            </motion.div>
-          ))}
-        </motion.div>
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: "gelir",
+    nav: "Gelir modeli",
+    mood: { ...riverShot(700, { dx: -300, dy: 260, dz: 420 }), depth: 6, rain: 0.1, buried: 0.4, contour: 0.8, ember: 0.2 },
+    body: () => (
+      <>
+        <Eyebrow n="08">Gelir modeli</Eyebrow>
+        <Title>
+          Vatandaşa ücretsiz, <span className="text-ember">kuruma lisanslı.</span>
+        </Title>
+        <Cards
+          items={[
+            ["Belediye aboneliği", "Şehir başına kurulum ve yıllık lisans: güncel koridor haritası, sel senaryoları, aciliyet listesi."],
+            ["Kurumsal risk verisi", "Sigorta, banka ve şirketlere adres ya da tesis bazında sel riski skoru; API ve TSRS 2 raporu."],
+            ["Ücretsiz açık katman", "Vatandaş kendi sokağının riskini görür; bildirimleri modelin doğrulanmasına geri döner."],
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: "is-birligi",
+    nav: "İş birlikleri",
+    mood: { ...riverShot(850, { dx: 260, dy: -300, dz: 380 }), depth: 7, rain: 0.2, buried: 0.3, contour: 0.7, ember: 0.2 },
+    body: () => (
+      <>
+        <Eyebrow n="09">İş birlikleri</Eyebrow>
+        <Title>Veri sahada, karar kurumda.</Title>
+        <Cards
+          items={[
+            ["Belediye ve su idareleri", "İBB AKOM, İSKİ, İZSU: menfez ve kanal verisiyle modeli kalibre etmek, sonuçları sahada denetlemek."],
+            ["Kamu ve meteoroloji", "AFAD ve MGM: anlık yağış ve tahmin verisiyle önceden uyarı, afet planlarına entegrasyon."],
+            ["Üniversite ve sigorta", "Uydu taşkın haritalarıyla bağımsız doğrulama; sigorta sektörüyle risk fiyatlaması pilotu."],
+          ]}
+        />
+      </>
+    ),
+  },
+  {
+    id: "gelecek",
+    nav: "Gelecek planı",
+    mood: { ...riverShot(250, { dx: 500, dy: 600, dz: 700 }), depth: 4, rain: 0.1, buried: 0.6, contour: 0.9, ember: 0.1 },
+    body: () => (
+      <>
+        <Eyebrow n="10">Gelecek planı</Eyebrow>
+        <Title>Sarıyer’den Türkiye’ye.</Title>
+        <Cards
+          numbered
+          items={[
+            ["0–6 ay", "Uydu taşkın haritasıyla doğrulama; İSKİ menfez verisiyle kalibrasyon; ilk belediye pilotu."],
+            ["6–12 ay", "İzmir ve Ankara saha pilotları; yağış tahminiyle saatler önceden uyarı; mobil bildirim."],
+            ["1–2 yıl", "Türkiye’nin her ilçesinde otomatik kurulum; daha ince ızgarayla sokak ölçeğinde sonuç."],
+          ]}
+        />
       </>
     ),
   },
@@ -287,7 +351,7 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(620, { dx: -160, dy: -120, dz: 45, lookZ: 6 }), depth: 13, rain: 0.8, buried: 0.2, contour: 0.4, ember: 1 },
     body: () => (
       <>
-        <Eyebrow n="08">Canlı</Eyebrow>
+        <Eyebrow n="11">Canlı</Eyebrow>
         <Title>Kendiniz görün.</Title>
         <Lead>
           Analiz haritasında binalara tıklayın, 14 Ekim’i saat saat oynatın. Sinemada selin dere yataklarından taşışını 3B izleyin.
@@ -302,8 +366,10 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(300, { dx: -900, dy: -1100, dz: 950 }), depth: 2.5, rain: 0, buried: 0.7, contour: 0.7, ember: 0 },
     body: () => (
       <>
-        <Eyebrow n="09">Takım SALU</Eyebrow>
-        <Title>Bilgisayar bilimi, görüntü işleme ve otomasyon: şehri selden önce görmek için bir aradayız.</Title>
+        <Eyebrow n="12">Takım SALU</Eyebrow>
+        <Title>
+          Bilgisayar bilimi, görüntü işleme, otomasyon. <span className="text-ember">Tek hedef: seli önceden görmek.</span>
+        </Title>
         <motion.ul variants={group} className="flex flex-wrap gap-3">
           {["Atakan Çalışkan", "Meriç Özkaya", "Funda Zeynep Şarkışla"].map((n) => (
             <motion.li key={n} variants={item} className="glass rounded-2xl px-4 py-2.5 font-display text-base font-semibold sm:px-5 sm:py-3 sm:text-lg">
@@ -311,10 +377,10 @@ const SLIDES: Slide[] = [
             </motion.li>
           ))}
         </motion.ul>
-        <motion.div variants={item} className="max-w-[640px] text-sm leading-relaxed text-fg-3">
-          <span className="text-fg-2">Sınırlamalar:</span> 20 m’lik hesap ızgarası dar sokakları ayırt edemez; menfez
-          kapasiteleri tahmine dayalı; yağış, istasyonun ölçtüğü toplama göre ölçeklendi. Resmi bir risk haritası değildir. FABDEM CC BY-NC-SA, OSM ve Overture ODbL.
-        </motion.div>
+        <motion.p variants={item} className="max-w-[640px] text-sm leading-relaxed text-fg-2">
+          <span className="text-fg">Sınırlamalar:</span> 20 m ızgara, tahmini menfez kapasiteleri; resmi risk haritası değildir.
+          Veri: FABDEM CC BY-NC-SA, OSM ve Overture ODbL.
+        </motion.p>
         <motion.a
           variants={item}
           href="https://github.com/atakanclskn/floodograph"
@@ -391,11 +457,14 @@ export function Deck() {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(mark);
     };
-    const t = setTimeout(mark, 700); // after the enter transition
+    // after the enter transition, and again once the staggered items have settled (their offset inflates the height)
+    const t = setTimeout(mark, 700);
     document.addEventListener("scroll", onScroll, true);
+    document.addEventListener("deck-settled", onScroll);
     window.addEventListener("resize", onScroll);
     return () => {
       clearTimeout(t);
+      document.removeEventListener("deck-settled", onScroll);
       cancelAnimationFrame(raf);
       document.removeEventListener("scroll", onScroll, true);
       window.removeEventListener("resize", onScroll);
@@ -514,7 +583,7 @@ export function Deck() {
       {/* legibility scrim: content sits on the left */}
       <div
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(10_15_18/0.92)_0%,rgb(10_15_18/0.7)_38%,rgb(10_15_18/0.05)_75%)] max-md:bg-[linear-gradient(180deg,rgb(10_15_18/0.35)_0%,rgb(10_15_18/0.9)_55%)]"
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(10_15_18/0.92)_0%,rgb(10_15_18/0.8)_50%,rgb(10_15_18/0.45)_80%,rgb(10_15_18/0.25)_100%)] max-md:bg-[linear-gradient(180deg,rgb(10_15_18/0.35)_0%,rgb(10_15_18/0.9)_55%)]"
       />
 
       <header className="absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center justify-between sm:left-[max(2rem,env(safe-area-inset-left))] sm:right-[max(2rem,env(safe-area-inset-right))]">
@@ -536,7 +605,7 @@ export function Deck() {
         </div>
       </header>
 
-      <main className="relative z-10 flex h-full items-center pb-[calc(6.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(5rem+env(safe-area-inset-top))] sm:pl-[max(2.5rem,env(safe-area-inset-left))] sm:pr-[max(2.5rem,env(safe-area-inset-right))] lg:pl-20 lg:pr-20 max-md:items-end">
+      <main className="relative z-10 flex h-full items-center pb-[calc(6.5rem+env(safe-area-inset-bottom))] pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(5rem+env(safe-area-inset-top))] [@media(max-height:720px)]:pb-[calc(5.5rem+env(safe-area-inset-bottom))] [@media(max-height:720px)]:pt-[calc(4.25rem+env(safe-area-inset-top))] sm:pl-[max(2.5rem,env(safe-area-inset-left))] sm:pr-[max(2.5rem,env(safe-area-inset-right))] lg:pl-20 md:pr-36 lg:pr-44 max-md:items-end">
         <AnimatePresence mode="wait" custom={dir} initial={false}>
           <motion.section
             key={slide.id}
@@ -557,9 +626,14 @@ export function Deck() {
               }),
             }}
             data-deck-scroll
-            className="flex max-h-full w-full max-w-[1100px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none] data-[more=1]:[mask-image:linear-gradient(to_bottom,black_82%,transparent)]"
+            className="flex max-h-full w-full max-w-[1100px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none] data-[more=1]:[mask-image:linear-gradient(to_bottom,black_calc(100%_-_40px),transparent)]"
           >
-            <motion.div variants={group} initial="hidden" animate="show" className="flex flex-col gap-4 sm:gap-6">
+            <motion.div
+              variants={group}
+              initial="hidden"
+              animate="show"
+              onAnimationComplete={() => document.dispatchEvent(new Event("deck-settled"))}
+              className="flex flex-col gap-4 sm:gap-6 [@media(max-height:720px)]:gap-3">
               {slide.body()}
             </motion.div>
           </motion.section>
