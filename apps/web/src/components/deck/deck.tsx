@@ -421,6 +421,7 @@ export function Deck() {
   const canvas = useRef<HTMLCanvasElement>(null);
   const backdrop = useRef<Backdrop | null>(null);
   const lock = useRef(0);
+  const linked = useRef<string | null>(null); // the #slide the page was opened with
   const reduce = useReducedMotion() ?? false;
   const n = SLIDES.length;
 
@@ -509,19 +510,20 @@ export function Deck() {
       backdrop.current = null;
     };
   }, [reduce]);
+  // deep link: must read the hash before the effect below rewrites the URL for slide 0
+  useEffect(() => {
+    linked.current ??= location.hash.slice(1);
+    const i = SLIDES.findIndex((s) => s.id === linked.current);
+    if (i <= 0) return;
+    const r = requestAnimationFrame(() => go(i)); // after hydration, so server and client markup match
+    return () => cancelAnimationFrame(r);
+  }, [go]);
+
   useEffect(() => {
     backdrop.current?.setMood(SLIDES[idx]!.mood);
     const id = SLIDES[idx]!.id;
     if (location.hash.slice(1) !== id) history.replaceState(null, "", idx === 0 ? location.pathname : `#${id}`);
   }, [idx]);
-
-  // deep link
-  useEffect(() => {
-    const i = SLIDES.findIndex((s) => s.id === location.hash.slice(1));
-    if (i <= 0) return;
-    const r = requestAnimationFrame(() => go(i)); // after hydration, so server and client markup match
-    return () => cancelAnimationFrame(r);
-  }, [go]);
 
   // keyboard, wheel, touch
   useEffect(() => {
