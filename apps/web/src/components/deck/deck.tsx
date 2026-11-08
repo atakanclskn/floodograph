@@ -271,8 +271,8 @@ function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVide
           </>
         )}
       </div>
-      {/* w-0 + min-w-full: the caption wraps to the video's width instead of widening a tall box */}
-      <figcaption className="w-0 min-w-full text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3">{caption}</figcaption>
+      {/* source credit only, one line: w-0 + min-w-full keeps it to the video's width, truncate never wraps it */}
+      <figcaption className="w-0 min-w-full truncate text-[clamp(12px,min(0.8vw,1.5vh),15px)] text-fg-3/80">{caption}</figcaption>
     </motion.figure>
   );
 }
@@ -344,7 +344,7 @@ const SLIDES: Slide[] = [
         <LiveVideo
           id={VIDEO_AYAZAGA}
           title="14 Ekim, Ayazağa: Habertürk TV görüntüsü"
-          caption="Habertürk TV · 14 Ekim, Ayazağa"
+          caption="Kaynak: Habertürk TV"
           extra={`&modestbranding=1&loop=1&playlist=${VIDEO_AYAZAGA}`}
         />
       </div>
@@ -370,7 +370,7 @@ const SLIDES: Slide[] = [
         <LiveVideo
           id="Lm_YAwsHXLQ"
           title="Maltepe TV: apartmanların altından dere akıyor"
-          caption="Maltepe TV · Apartmanların altından dere akıyor"
+          caption="Kaynak: Maltepe TV"
           aspect="9/16"
           extra="&loop=1&playlist=Lm_YAwsHXLQ"
         />
@@ -428,7 +428,7 @@ const SLIDES: Slide[] = [
           </div>
           {/* the width cap keeps the 16:9 box under ~42vh tall, so the slide still fits 1366x768 */}
           <div className="w-full min-w-0 max-w-[calc(42vh*16/9)]">
-            <LiveVideo id={VIDEO_IHA} title="14 Ekim, Ayazağa: İhlas Haber Ajansı görüntüsü" caption="İhlas Haber Ajansı · 14 Ekim, Ayazağa" />
+            <LiveVideo id={VIDEO_IHA} title="14 Ekim, Ayazağa: İhlas Haber Ajansı görüntüsü" caption="Kaynak: İHA" />
           </div>
         </div>
       </>
