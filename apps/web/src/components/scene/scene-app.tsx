@@ -5,6 +5,7 @@ import { AnimatePresence, animate, motion } from "motion/react";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { EngineState, FloodEngine, Mode } from "./engine";
 import { Timeline } from "./timeline";
+import Link from "next/link";
 import { SiteNav } from "@/components/site-nav";
 import { RainOverlay, rainIntensityAt } from "@/components/rain-overlay";
 import { floodRepository } from "@/lib/repository";
@@ -38,6 +39,7 @@ const EMPTY: EngineState = {
   rate: 1,
   mode: "tur",
   tourReady: false,
+  tourDone: false,
   chapter: null,
   loaded: 0,
   total: 0,
@@ -229,6 +231,8 @@ export function SceneApp() {
   const loading = s.phase !== "hata" && (s.phase === "hazirlaniyor" || (s.total > 0 && s.loaded < s.total && !s.tourReady));
   const pct = s.total ? s.loaded / s.total : 0;
   const ended = s.mode === "serbest" && !s.playing && s.t >= s.t1;
+  const [whatIfClosed, setWhatIfClosed] = useState(false);
+  const showWhatIf = (s.tourDone || ended) && !whatIfClosed;
 
   return (
     <div className="relative h-dvh w-full overflow-hidden bg-ink text-fg">
@@ -308,6 +312,50 @@ export function SceneApp() {
               </div>
             </div>
           </motion.dl>
+        )}
+      </AnimatePresence>
+
+      {/* the story continues: the validated model, asked about İzmir */}
+      <AnimatePresence>
+        {showWhatIf && (
+          <motion.aside
+            key="what-if"
+            aria-label="İzmir senaryosu"
+            initial={{ opacity: 0, y: 16, scale: 0.98 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 10, transition: { duration: 0.15 } }}
+            transition={spring}
+            className="glass absolute inset-x-3 bottom-[calc(10.5rem+env(safe-area-inset-bottom))] z-30 flex flex-col gap-3 rounded-[22px] p-4 sm:inset-x-auto sm:bottom-40 sm:right-5 sm:w-[340px]"
+          >
+            <button
+              type="button"
+              onClick={() => setWhatIfClosed(true)}
+              aria-label="Kapat"
+              className="absolute right-2 top-2 inline-flex size-9 items-center justify-center rounded-full text-fg-3 transition-colors hover:bg-white/10 hover:text-fg"
+            >
+              <svg aria-hidden="true" width="12" height="12" viewBox="0 0 12 12" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round">
+                <path d="M2 2l8 8M10 2l-8 8" />
+              </svg>
+            </button>
+            <span className="font-mono text-[11px] uppercase tracking-[0.2em] text-ember-2">Model doğrulandı</span>
+            <h2 className="pr-8 font-display text-[22px] font-semibold leading-tight tracking-[-0.02em]">
+              Peki ya bu felaket İzmir&rsquo;de yaşansaydı?
+            </h2>
+            <p className="text-[13px] leading-relaxed text-fg-2">
+              Sarıyer&rsquo;de gözlemlerle doğrulanan aynı model, İzmir merkezinde: yağışı sen belirle, hangi binalara su
+              ulaşır ve önce nereye müdahale edilmeli, gör.
+            </p>
+            <Link
+              href="/izmir?yagis=188"
+              transitionTypes={["nav-forward"]}
+              className="btn-ember inline-flex min-h-12 items-center justify-center gap-2 rounded-2xl bg-ember px-5 text-[15px] font-semibold text-ink"
+            >
+              İzmir&rsquo;de görüntüle
+              <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 8h10M9 4l4 4-4 4" />
+              </svg>
+            </Link>
+          </motion.aside>
         )}
       </AnimatePresence>
 

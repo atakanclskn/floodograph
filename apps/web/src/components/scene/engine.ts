@@ -42,6 +42,8 @@ export type EngineState = {
   rate: number;
   mode: Mode;
   tourReady: boolean;
+  /** the cinematic tour has played to its end (the "what if in İzmir?" card appears) */
+  tourDone: boolean;
   chapter: { title: string; sub: string; key: number } | null;
   loaded: number;
   total: number;
@@ -72,6 +74,7 @@ const initialState: EngineState = {
   rate: 1,
   mode: "tur",
   tourReady: false,
+  tourDone: false,
   chapter: null,
   loaded: 0,
   total: 0,
@@ -435,7 +438,7 @@ export class FloodEngine {
       t = shot.t;
       const ch = [...this.tour.chapters].reverse().find((c) => this.tourS >= c.at) ?? null;
       if (ch && ch.title !== st.chapter?.title) this.set({ chapter: { title: ch.title, sub: ch.sub, key: ch.at } });
-      if (this.tourS >= this.tour.duration) this.set({ mode: "serbest", playing: false, chapter: null });
+      if (this.tourS >= this.tour.duration) this.set({ mode: "serbest", playing: false, chapter: null, tourDone: true });
     } else if (st.playing) {
       t = Math.min(t + dt * BASE_RATE * st.rate, st.t1);
       if (t >= st.t1) this.set({ playing: false });

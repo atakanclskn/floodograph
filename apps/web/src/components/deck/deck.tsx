@@ -86,22 +86,21 @@ function Ctas() {
   return (
     <motion.div variants={item} className="flex flex-wrap gap-3">
       <Link
-        href="/demo"
+        href="/sinema"
         transitionTypes={["nav-forward"]}
         className="btn-ember group inline-flex min-h-14 items-center gap-2.5 rounded-2xl bg-ember px-7 text-[17px] font-semibold text-ink"
       >
-        Analiz haritası
+        İstanbul: 14 Ekim seli
         <span className="transition-transform duration-200 group-hover:translate-x-0.5">
           <Arrow />
         </span>
       </Link>
       <Link
-        href="/sinema"
+        href="/izmir"
         transitionTypes={["nav-forward"]}
         className="glass inline-flex min-h-14 items-center gap-2.5 rounded-2xl px-6 text-[17px] font-semibold transition-colors duration-150 hover:bg-white/10"
       >
-        <Play />
-        3B sinema
+        İzmir&rsquo;de olsaydı?
       </Link>
     </motion.div>
   );
@@ -354,7 +353,7 @@ const SLIDES: Slide[] = [
         <Eyebrow n="11">Canlı</Eyebrow>
         <Title>Kendiniz görün.</Title>
         <Lead>
-          Analiz haritasında binalara tıklayın, 14 Ekim’i saat saat oynatın. Sinemada selin dere yataklarından taşışını 3B izleyin.
+          İstanbul’da 14 Ekim selinin dere yataklarından taşışını 3B izleyin, serbestçe gezin. Ardından aynı modeli İzmir’de çalıştırın: yağışı siz belirleyin, önce nereye müdahale edileceğini görün.
         </Lead>
         <Ctas />
       </>
@@ -614,15 +613,12 @@ export function Deck() {
           <span className="font-display text-[17px] font-bold tracking-[-0.02em]">floodograph</span>
         </button>
         <div className="flex items-center gap-2">
-          <Link href="/sehirler" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center rounded-xl px-4 text-sm font-semibold sm:inline-flex">
-            Şehirler
+          <Link href="/izmir" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center rounded-xl px-4 text-sm font-semibold sm:inline-flex">
+            İzmir
           </Link>
-          <Link href="/sinema" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center gap-2 rounded-xl px-4 text-sm font-semibold sm:inline-flex">
+          <Link href="/sinema" transitionTypes={["nav-forward"]} className="btn-ember inline-flex min-h-11 items-center gap-2 rounded-xl bg-ember px-4 text-sm font-semibold text-ink">
             <Play />
-            Sinema
-          </Link>
-          <Link href="/demo" transitionTypes={["nav-forward"]} className="btn-ember inline-flex min-h-11 items-center rounded-xl bg-ember px-4 text-sm font-semibold text-ink">
-            Demoyu aç
+            İstanbul
           </Link>
         </div>
       </header>

@@ -18,6 +18,6 @@ export default function manifest(): MetadataRoute.Manifest {
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },
       { src: "/icon-maskable-512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
     ],
-    shortcuts: [{ name: "Demo haritası", url: "/demo", icons: [{ src: "/icon-192.png", sizes: "192x192" }] }],
+    shortcuts: [{ name: "İstanbul · 14 Ekim seli", url: "/sinema", icons: [{ src: "/icon-192.png", sizes: "192x192" }] }],
   };
 }

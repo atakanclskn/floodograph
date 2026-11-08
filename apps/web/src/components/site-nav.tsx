@@ -4,17 +4,16 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-/** The two parts of the product: the Sarıyer pilot (analysis map + cinematic 3D) and the whole cities. */
+/**
+ * The story in two steps: İstanbul, where the model is validated on the 14 Oct 2026 Sarıyer flood (cinematic tour +
+ * free exploration), then İzmir, the same model asked "what if this rain fell here?".
+ */
 const SECTIONS = [
-  { href: "/demo", label: "Sarıyer pilotu", short: "Pilot" },
-  { href: "/sinema", label: "Sinema", short: "Sinema" },
-  { href: "/sehirler", label: "Şehirler", short: "Şehirler" },
+  { href: "/sinema", label: "İstanbul", short: "İstanbul" },
+  { href: "/izmir", label: "İzmir", short: "İzmir" },
 ] as const;
 
-/**
- * One top bar for every map page: home on the left, the sections as tabs, page controls go in their own group.
- * The pilot's two views (Sarıyer pilotu, Sinema) sit together, Şehirler is separated from them.
- */
+/** One top bar for every map page: home on the left, the two sections as tabs. */
 export function SiteNav() {
   const path = usePathname();
   return (
@@ -29,11 +28,10 @@ export function SiteNav() {
         <span className="hidden font-display text-[16px] font-bold tracking-[-0.02em] lg:inline">floodograph</span>
       </Link>
       <span aria-hidden="true" className="mx-0.5 h-6 w-px bg-line" />
-      {SECTIONS.map((s, i) => {
+      {SECTIONS.map((s) => {
         const active = path === s.href;
         return (
           <span key={s.href} className="flex items-center">
-            {i === 2 && <span aria-hidden="true" className="mx-1 h-6 w-px bg-line" />}
             <Link
               href={s.href}
               aria-current={active ? "page" : undefined}
