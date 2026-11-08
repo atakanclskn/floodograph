@@ -425,10 +425,10 @@ const SLIDES: Slide[] = [
               head={["Yer", "Gözlenen", "Model"]}
               numericLast
               rows={[
-                ["Ayazağa Meydanı", "1,5–2 m", "1,54 m"],
-                ["Dereboyu Caddesi", "1,70 m", "2,76 m"],
-                ["Kemerburgaz Caddesi", "200 kişi mahsur", "2,08 m"],
-                ["Baskının başlaması", "~17:30", "18:10"],
+                ["Ayazağa Meydanı", "Restoranda 1,5–2 m su", "1,54 m"],
+                ["Dereboyu Caddesi", "Mağazada 1,70 m su", "2,76 m"],
+                ["Kemerburgaz Caddesi", "1 m'yi aşan su, botla kurtarma", "2,08 m"],
+                ["Su 0,5 m'ye ne zaman çıktı", "~17:30", "18:10"],
               ]}
             />
             <Note>Model bu olaya göre kalibre edildi; bağımsız sınama uydu verisiyle yapılacak.</Note>
@@ -449,13 +449,13 @@ const SLIDES: Slide[] = [
       <>
         <Eyebrow>Yapay zekâ ve fizik</Eyebrow>
         <Title>
-          Yapay zekâ veriyi tamamlar, <span className="text-ember">fizik suyu yürütür.</span>
+          Binaları yapay zekâ buldu, <span className="text-ember">suyu fizik hesapladı.</span>
         </Title>
         <Cards
           items={[
-            ["Yapay zekâ", "Uydu görüntüsünden derin öğrenmeyle çıkarılan bina izleri, haritada olmayan 4.946 binayı tamamladı."],
-            ["Fizik", "Suyun yolunu ve hızını sığ su denklemleri hesaplar. Kara kutu bir model, bu kadar nadir bir selden öğrenemez."],
-            ["Hız", "30 saatlik bir seli ekran kartında 3 dakikada hesaplıyoruz."],
+            ["Eksik binaları yapay zekâ buldu", "Haritalarda 11.841 bina vardı. Uydu görüntülerinden derin öğrenmeyle çıkarılan bina izleriyle bu sayı 16.787'ye çıktı."],
+            ["Suyun yolunu fizik hesaplar", "Su eğimle akar; bunu sığ su denklemleri hesaplar. 14 Ekim gibi nadir bir selden öğrenecek kadar veri yok, bu yüzden modeli fiziğe dayandırdık."],
+            ["Dakikalar içinde sonuç", "30 saatlik bir seli ekran kartında 3 dakikada hesaplıyoruz. Yeni bir yağış tahmini geldiğinde senaryo dakikalar içinde hazır olur."],
           ]}
         />
       </>
