@@ -148,7 +148,7 @@ const SLIDES: Slide[] = [
       <>
         <Eyebrow n="02">Problem</Eyebrow>
         <Title>
-          Şehir dereleri kapattı. <span className="text-ember">Su unutmadı.</span>
+          Üstü betonla kapatılan dereler, <span className="text-ember">selde yeniden akıyor.</span>
         </Title>
         <Lead>
           Üstü betonla örtülen dere haritadan silinir, ama arazinin eğimi değişmez. Kuvvetli yağışta su eski yatağını bulur ve
