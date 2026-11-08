@@ -98,7 +98,7 @@ export function buildBaseStyle(opts: { demTiles: string; contourTiles: string })
         type: "line",
         source: "contours",
         "source-layer": "contours",
-        filter: ["==", ["get", "level"], 0],
+        filter: ["all", ["==", ["get", "level"], 0], [">", ["get", "ele"], 0]], // no sea-floor contours
         paint: { "line-color": "rgba(111,168,201,0.16)", "line-width": 0.6 },
       },
       {
@@ -106,7 +106,7 @@ export function buildBaseStyle(opts: { demTiles: string; contourTiles: string })
         type: "line",
         source: "contours",
         "source-layer": "contours",
-        filter: [">", ["get", "level"], 0],
+        filter: ["all", [">", ["get", "level"], 0], [">", ["get", "ele"], 0]],
         paint: { "line-color": "rgba(111,168,201,0.38)", "line-width": 1.1 },
       },
       {
@@ -114,7 +114,7 @@ export function buildBaseStyle(opts: { demTiles: string; contourTiles: string })
         type: "symbol",
         source: "contours",
         "source-layer": "contours",
-        filter: [">", ["get", "level"], 0],
+        filter: ["all", [">", ["get", "level"], 0], [">", ["get", "ele"], 0]],
         layout: {
           "symbol-placement": "line",
           "text-field": ["concat", ["number-format", ["get", "ele"], {}], " m"],

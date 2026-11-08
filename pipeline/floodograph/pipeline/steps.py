@@ -38,12 +38,46 @@ def osm_layers(city: CityConfig):
     }
 
 
+@cached("waterways")
+def osm_waterways(city: CityConfig):
+    """Only the streams (corridor classification); a whole-city run must not pull every building over Overpass."""
+    return osm.waterways(city.hydro_bbox)
+
+
 @cached("footprints")
 def building_footprints(city: CityConfig) -> gpd.GeoDataFrame:
     """Overture buildings (OSM + ML footprints), keeping OSM height/levels tags where OSM has the building."""
     osm_b = osm_layers(city)["buildings"]
     heights = osm_b.drop_duplicates("osm_id").set_index("osm_id")["height_m"]
     return overture.buildings(city.bbox, city.data_dir / "cache", heights)
+
+
+def sea_mask(city: CityConfig) -> gpd.GeoSeries:
+    """Sea and strait surface (FABDEM is 0 m over the sea, NaN past the tiles), one polygon in the city CRS.
+    Flow lines traced across that flat surface are artefacts, not streams."""
+    import rasterio.features
+    from shapely.geometry import shape as to_shape
+    from shapely.ops import unary_union
+
+    d = dem(city)
+    a = d.data
+    wet = (~np.isfinite(a)) | (a <= 0.0)
+    polys = [to_shape(g) for g, v in rasterio.features.shapes(wet.astype(np.uint8), mask=wet, transform=d.transform) if v == 1]
+    # drop specks (a few 0 m cells on land, e.g. quarries / docks); keep real water bodies (> 0.5 km²)
+    polys = [p for p in polys if p.area > 5e5]
+    return gpd.GeoSeries([unary_union(polys)] if polys else [], crs=city.epsg)
+
+
+def land_only(city: CityConfig, lines: gpd.GeoDataFrame, min_len_m: float = 60) -> gpd.GeoDataFrame:
+    """Cut corridor lines where they run over the sea (see sea_mask); keep the land parts."""
+    sea = sea_mask(city)
+    if not len(sea):
+        return lines
+    crs = lines.crs
+    ll = lines.to_crs(city.epsg)
+    ll["geometry"] = ll.geometry.difference(sea.iloc[0].buffer(30))
+    ll = ll[~ll.geometry.is_empty & (ll.geometry.length > min_len_m)].copy()
+    return ll.to_crs(crs)
 
 
 def _aoi(city: CityConfig) -> gpd.GeoSeries:
@@ -130,9 +164,10 @@ def corridors(city: CityConfig, b: gpd.GeoDataFrame | None = None) -> gpd.GeoDat
     lines = lines[lines.intersects(aoi)].copy()
     lines["geometry"] = lines.geometry.intersection(aoi)
     lines = lines[~lines.geometry.is_empty & (lines.geometry.length > 30)].reset_index(drop=True)
+    lines = land_only(city, lines).reset_index(drop=True)
 
     # Classify: mapped buried (OSM culvert/tunnel), mapped open stream, or derived (no mapped stream = lost stream candidate)
-    ww = osm_layers(city)["waterways"].to_crs(city.epsg)
+    ww = osm_waterways(city).to_crs(city.epsg)
     kind = np.full(len(lines), "derived", dtype=object)
     for is_buried, label in ((False, "open"), (True, "buried_osm")):
         sel = ww[ww["buried"] == is_buried]

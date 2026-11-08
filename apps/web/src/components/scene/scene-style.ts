@@ -8,7 +8,7 @@ export const FOG = "#0b1216";
  * Every OSM building in the country as a 3D extrusion (OpenFreeMap). Where we draw our own analysed buildings,
  * the basemap copies are hidden by OSM id (see hideOwnBuildings), so no building is drawn twice.
  */
-export function basemapBuildings(color = "#1d262b", windows = false): never {
+export function basemapBuildings(color = "#1d262b", night = false, fadeOutAt?: number): never {
   return {
     id: "basemap-buildings",
     type: "fill-extrusion",
@@ -17,11 +17,15 @@ export function basemapBuildings(color = "#1d262b", windows = false): never {
     minzoom: 13,
     paint: {
       "fill-extrusion-color": color,
-      // night facades: a tiled pattern of lit / dark windows (installWindowPattern registers the image)
-      ...(windows ? { "fill-extrusion-pattern": WINDOW_PATTERN } : {}),
+      // night: walls darken toward the ground (no window texture here: a fill-extrusion pattern also covers
+      // roofs, which read as a checkerboard; lit windows come from NightBuildingsLayer where it is used)
+      ...(night ? { "fill-extrusion-vertical-gradient": true } : {}),
       "fill-extrusion-height": ["coalesce", ["get", "render_height"], 9],
       "fill-extrusion-base": ["coalesce", ["get", "render_min_height"], 0],
-      "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 13, 0, 14, 0.95],
+      "fill-extrusion-opacity":
+        fadeOutAt == null
+          ? ["interpolate", ["linear"], ["zoom"], 13, 0, 14, 0.95]
+          : ["interpolate", ["linear"], ["zoom"], 13, 0, 13.6, 0.95, fadeOutAt - 0.2, 0.95, fadeOutAt, 0],
     },
   } as never;
 }
@@ -40,44 +44,8 @@ export function hideOwnBuildings(map: MlMap, ids: Iterable<number>) {
   map.setFilter("basemap-buildings", ["match", osmId, labels, false, true] as unknown as ExpressionSpecification);
 }
 
-export const WINDOW_PATTERN = "fg-windows";
-
-/**
- * Register the night-window facade pattern used by basemapBuildings(.., true): a grid of windows on a dark wall,
- * about a third lit in warm tones, seeded so it is stable between visits. Decorative.
- */
-export function installWindowPattern(map: MlMap) {
-  const W = 32;
-  const H = 32;
-  const data = new Uint8Array(W * H * 4);
-  let seed = 7;
-  const rand = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
-  const wall = [27, 34, 39];
-  for (let i = 0; i < W * H; i++) data.set([wall[0]!, wall[1]!, wall[2]!, 255], i * 4);
-  const cell = 4;
-  for (let cy = 0; cy < H / cell; cy++)
-    for (let cx = 0; cx < W / cell; cx++) {
-      const lit = rand() < 0.22;
-      const warm = rand();
-      // lit windows warm but muted; unlit ones only a shade darker than the wall
-      const c = lit ? (warm < 0.7 ? [196, 150, 96] : [214, 182, 132]) : [20, 26, 30];
-      for (let y = cy * cell + 1; y < cy * cell + 3; y++)
-        for (let x = cx * cell + 1; x < cx * cell + 3; x++) data.set([c[0]!, c[1]!, c[2]!, 255], (y * W + x) * 4);
-    }
-  const add = () => {
-    try {
-      if (!map.hasImage(WINDOW_PATTERN)) map.addImage(WINDOW_PATTERN, { width: W, height: H, data });
-    } catch {
-      // style not ready yet: styleimagemissing below adds it when a tile first asks for it
-    }
-  };
-  add();
-  map.on("styleimagemissing", (e: { id: string }) => {
-    if (e.id === WINDOW_PATTERN) add();
-  });
-}
-
-export function sceneStyle(): StyleSpecification {
+/** `buildingsFadeOutAt`: hand the buildings over to a custom layer from this zoom on (see basemapBuildings). */
+export function sceneStyle(buildingsFadeOutAt?: number): StyleSpecification {
   const dem = { type: "raster-dem" as const, encoding: "terrarium" as const, tiles: [TERRARIUM_URL], tileSize: 256, maxzoom: 15 };
   const road = (classes: string[]) => ["match", ["get", "class"], classes, true, false] as never;
   return {
@@ -174,7 +142,7 @@ export function sceneStyle(): StyleSpecification {
           "line-width": ["interpolate", ["exponential", 1.6], ["zoom"], 11, 0.6, 18, 6],
         },
       },
-      basemapBuildings("#1d262b", true),
+      basemapBuildings("#222c32", true, buildingsFadeOutAt),
       {
         id: "place-label",
         type: "symbol",

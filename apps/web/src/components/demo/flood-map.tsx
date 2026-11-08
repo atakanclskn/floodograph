@@ -25,11 +25,17 @@ type FC = { type: "FeatureCollection"; features: Feature[] };
 
 /** Pilot area (Sarıyer, İstanbul): bbox [28.965, 41.090, 29.040, 41.145]. */
 export const PILOT_CENTER: [number, number] = [29.0025, 41.1175];
-/** Pan limit: the whole Istanbul urban area, where the city-wide stream corridors are. */
+/**
+ * The pilot is a close, detailed look at Sarıyer: the analysed area plus a ring around it, where the city-wide
+ * corridors fill in the neighbouring valleys (the whole city is the /sehirler view). West, south, east, north.
+ */
+const SURROUND: [number, number, number, number] = [28.93, 41.065, 29.08, 41.175];
+/** Pan limit: a little past the surround, so its edge can be centred. */
 const BOUNDS: [[number, number], [number, number]] = [
-  [28.5, 40.85],
-  [29.5, 41.3],
+  [28.89, 41.04],
+  [29.12, 41.2],
 ];
+const MIN_ZOOM = 11.8;
 /** Copied from maplibre-gl/dist by scripts/copy-maplibre-worker.mjs (pre-dev / pre-build). */
 const WORKER_URL = "/vendor/maplibre-gl-worker.mjs";
 const TERRARIUM = "https://elevation-tiles-prod.s3.amazonaws.com/terrarium/{z}/{x}/{y}.png";
@@ -143,7 +149,7 @@ const blinkFilter = (from: number, to: number, selectedId: number | null): Expre
 
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
 
-/** City-wide stream corridors of every city, tiled, loaded only where the screen is (the pilot has its own). */
+/** The city-wide corridors around the pilot (tiles), next to the pilot's own building-scored ones. */
 type CorridorBox = { kind: CorridorKind; x0: number; y0: number; x1: number; y1: number };
 type ViewState = {
   boxes: CorridorBox[];
@@ -151,6 +157,8 @@ type ViewState = {
   pilot: unknown[];
   tiles: CorridorTiles;
   emit: (s: MapStats) => void;
+  /** corridors pushed to the map (they do not change with the view) */
+  drawn?: boolean;
 };
 const VIEW = new WeakMap<MlMap, ViewState>();
 
@@ -163,10 +171,23 @@ function loadCorridors(repo: ReturnType<typeof floodRepository>, cityId: string)
 async function refreshCorridors(map: MlMap) {
   const v = VIEW.get(map);
   if (!v) return;
-  const b = map.getBounds();
-  const city = await v.tiles.around(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+  if (v.drawn) {
+    // the pilot's corridor set is fixed (pilot + surround): moving the map only changes what is counted
+    if (v.last) {
+      v.last = { ...v.last, corridors: viewCounts(map) };
+      v.emit(v.last);
+    }
+    return;
+  }
+  const [sw, ss, se, sn] = SURROUND;
+  const city = (await v.tiles.around(sw, ss, se, sn)).filter((f) => {
+    const box: CorridorBox = { kind: f.properties.kind, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    bboxOf(f.geometry.coordinates, box);
+    return box.x1 >= sw && box.x0 <= se && box.y1 >= ss && box.y0 <= sn;
+  });
   if (VIEW.get(map) !== v || !map.getSource("corridors")) return;
   const features = [...v.pilot, ...city];
+  v.drawn = true;
   (map.getSource("corridors") as GeoJSONSource).setData({ type: "FeatureCollection", features } as GeoData);
   v.boxes = [];
   for (const f of features as { properties: CorridorProps; geometry: { coordinates: unknown } }[]) {
@@ -273,6 +294,7 @@ export function FloodMap(props: FloodMapProps) {
         pitch: latest.current.tilted ? 52 : 0,
         bearing: -18,
         maxBounds: BOUNDS,
+        minZoom: MIN_ZOOM,
         maxPitch: 70,
         attributionControl: false,
         fadeDuration: reduce ? 0 : 300,

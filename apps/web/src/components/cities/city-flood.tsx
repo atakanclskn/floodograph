@@ -6,13 +6,14 @@ import { useEffect, useRef, useState } from "react";
 import type { GeoJSONSource, Map as MlMap, StyleSpecification } from "maplibre-gl";
 import type { GridFrame, GridMeta, Scenario } from "@floodograph/core";
 import { RainOverlay } from "@/components/rain-overlay";
-import { installWindowPattern, sceneStyle } from "@/components/scene/scene-style";
+import { sceneStyle } from "@/components/scene/scene-style";
+import { NIGHT_MIN_ZOOM, NightBuildingsLayer } from "./night-buildings";
 import { SiteNav } from "@/components/site-nav";
 import { Water3DLayer } from "@/components/demo/water-3d";
 import { floodRepository } from "@/lib/repository";
 import { fmtInt } from "@/lib/scenario";
 import { FrameStore } from "@/lib/water-frames";
-import { CorridorTiles } from "@/lib/corridor-tiles";
+import { CorridorTiles, minUpstreamKm2 } from "@/lib/corridor-tiles";
 import { CORRIDOR_ORDER, CORRIDOR_STYLE, type CorridorKind } from "@/lib/tier-style";
 
 const WORKER_URL = "/vendor/maplibre-gl-worker.mjs";
@@ -50,7 +51,7 @@ const MAX_REGIONS = 10;
 
 /** Flat night base (no 3D terrain: the water sits on z = 0) with every OSM building lit at night. */
 function cityStyle(): StyleSpecification {
-  const s = sceneStyle();
+  const s = sceneStyle(NIGHT_MIN_ZOOM);
   delete (s as { terrain?: unknown }).terrain;
   return s;
 }
@@ -96,12 +97,13 @@ export function CityFlood() {
         attributionControl: false,
       });
       mapRef.current = map;
-      installWindowPattern(map);
       (window as unknown as { __cityMap?: MlMap }).__cityMap = map;
       map.addControl(new AttributionControl({ compact: true }), "bottom-right");
       map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
       map.on("load", () => {
         if (!map) return;
+        // close up, the basemap's buildings are redrawn with lit windows on the walls (and plain roofs)
+        map.addLayer(new NightBuildingsLayer(), "place-label");
         // stream corridors of every city, loaded tile by tile only where the screen is
         map.addSource("corridors", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         for (const kind of CORRIDOR_ORDER) {
@@ -116,9 +118,15 @@ export function CityFlood() {
               layout: { "line-cap": "round", "line-join": "round" },
               paint: {
                 "line-color": st.color,
-                "line-opacity": kind === "derived" ? 0.85 : 0.6,
-                "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.8, 15, 2.6],
-                ...(st.dash ? { "line-dasharray": st.dash } : {}),
+                // zoomed out: thin, softer, solid (dashes at that scale read as noise); scale up as you zoom in
+                "line-opacity": ["interpolate", ["linear"], ["zoom"], 10, kind === "derived" ? 0.55 : 0.45, 13, kind === "derived" ? 0.9 : 0.7],
+                "line-width": [
+                  "interpolate", ["linear"], ["zoom"],
+                  10, ["interpolate", ["linear"], ["coalesce", ["get", "up"], 1], 1, 0.5, 40, 1.1, 200, 1.8],
+                  13, ["interpolate", ["linear"], ["coalesce", ["get", "up"], 1], 1, 1.1, 40, 2, 200, 3],
+                  16, ["interpolate", ["linear"], ["coalesce", ["get", "up"], 1], 1, 2.4, 40, 3.4, 200, 4.4],
+                ],
+                ...(st.dash ? { "line-dasharray": ["step", ["zoom"], ["literal", [1, 0]], 12.5, ["literal", st.dash]] } : {}),
               },
             },
             "basemap-buildings",
@@ -132,7 +140,11 @@ export function CityFlood() {
             setCorr({ derived: 0, buried_osm: 0, open: 0 });
             return;
           }
-          const feats = await tiles.around(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+          const zoom = map.getZoom();
+          const minUp = minUpstreamKm2(zoom);
+          const feats = (await tiles.around(b.getWest(), b.getSouth(), b.getEast(), b.getNorth())).filter(
+            (f) => (f.properties.up ?? Infinity) >= minUp,
+          );
           if (!map?.getSource("corridors")) return;
           (map.getSource("corridors") as GeoJSONSource).setData({ type: "FeatureCollection", features: feats } as never);
           const w = b.getWest(), e = b.getEast(), so = b.getSouth(), n = b.getNorth();

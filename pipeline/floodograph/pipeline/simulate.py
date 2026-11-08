@@ -30,8 +30,13 @@ from ..core.hydrology import fill_nodata_nearest, sample
 from . import steps
 
 WET_M = 0.15  # water depth at a wall that counts as "water reached the building"
-N_MANNING = 0.035  # urban mixed surface (no land-cover layer yet)
-LOSS_MM_H = 15.0  # infiltration + storm-sewer capacity, uniform
+# Calibrated against the 14 Oct 2026 observations (pipeline/floodograph/pipeline/calibrate.py, docs/VALIDATION.md):
+# during the record storm soils were saturated and inlets blocked, so the effective loss is small.
+N_MANNING = 0.04  # urban mixed surface (no land-cover layer yet)
+LOSS_MM_H = 1.0  # infiltration + storm-sewer capacity, uniform (was 15: dry-soil value, under-predicted the flood)
+RAIN_SHARPEN = 2.0  # hourly ERA5 smooths the 10-30 min bursts: concentrate rain into the peak hours
+RAIN_SHIFT_H = 1.0  # the local peak came earlier than ERA5's (flooding began ~17:30 in Ayazağa)
+STATION_MM = 188.0  # Sarıyer station, 14 Oct 2026 (İBB, 15 Oct 00:47: 187.9 mm)
 Q_SPEC = 6.7  # m3/s per km2: rational method, C=0.8, 2-year i~30 mm/h -> culvert design capacity
 DEPTH_SCALE = 0.001  # m per uint16 step
 VEL_SCALE = 0.001  # m/s per int16 step

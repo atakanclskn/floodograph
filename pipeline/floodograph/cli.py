@@ -48,9 +48,12 @@ def cmd_simulate(args: argparse.Namespace) -> None:
     from .adapters.open_meteo import HistoricalRain
     from .pipeline.simulate import run_scenario
 
+    from .pipeline.calibrate import shape_rain
+    from .pipeline.simulate import RAIN_SHARPEN, RAIN_SHIFT_H
+
     city = load_cities()[args.city]
-    rain = HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
-                          station_note=args.station_note).series(*city.rain_point)
+    rain = shape_rain(HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
+                                     station_note=args.station_note).series(*city.rain_point), RAIN_SHIFT_H, RAIN_SHARPEN)
     s = run_scenario(city, args.scenario, rain, res_m=args.res, backend=args.backend)
     s.pop("timeline", None)
     print(json.dumps(s, ensure_ascii=False, indent=2, default=str))
@@ -67,8 +70,11 @@ def cmd_upload_scenario(args: argparse.Namespace) -> None:
     city = load_cities()[args.city]
     out = city.data_dir / "scenarios" / args.scenario
     summary = json.loads((out / "summary.json").read_text(encoding="utf-8"))
-    rain = HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
-                          station_note=args.station_note).series(*city.rain_point)
+    from .pipeline.calibrate import shape_rain
+    from .pipeline.simulate import RAIN_SHARPEN, RAIN_SHIFT_H
+
+    rain = shape_rain(HistoricalRain(args.start, args.hours, station_total_mm=args.station_mm,
+                                     station_note=args.station_note).series(*city.rain_point), RAIN_SHIFT_H, RAIN_SHARPEN)
     imp = pd.read_csv(out / "impacts.csv")
     b = steps.buildings(city)[["osm_id", "hand_m", "critical", "grp"]]
     imp = imp.merge(b, on="osm_id", how="left")
@@ -151,8 +157,17 @@ def cmd_corridor_tiles(args: argparse.Namespace) -> None:
     from .config import ROOT
     from .pipeline.corridor_tiles import write_tiles
 
+    import geopandas as gpd
+
+    from .pipeline import steps
+
     cities = load_cities()
-    sources = {c: cities[c].data_dir / "corridors.geojson" for c in args.city if (cities[c].data_dir / "corridors.geojson").exists()}
+    sources = {}
+    for c in args.city:
+        path = cities[c].data_dir / "corridors.geojson"
+        if path.exists():
+            # older corridor files were made before the sea cut: apply it here too (idempotent)
+            sources[c] = steps.land_only(cities[c], gpd.read_file(path))
     out = ROOT.parent / "apps" / "web" / "public" / "corridors"
     print(json.dumps(write_tiles(sources, out), ensure_ascii=False, indent=2))
 
@@ -190,8 +205,8 @@ def main() -> None:
     m.add_argument("--scenario", default="istanbul-2026-10-14")
     m.add_argument("--start", default="2026-10-14T06:00")
     m.add_argument("--hours", type=int, default=30)
-    m.add_argument("--station-mm", type=float, default=150.0)
-    m.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
+    m.add_argument("--station-mm", type=float, default=188.0)
+    m.add_argument("--station-note", default="Sarıyer istasyonu 187,9 mm (İBB, 14 Ekim 2026)")
     m.add_argument("--res", type=float, default=20.0)
     m.add_argument("--backend", choices=["auto", "cpu", "gpu"], default="auto",
                    help="solver: CUDA when available (auto), or force the numba CPU reference")
@@ -199,11 +214,11 @@ def main() -> None:
     u = sub.add_parser("upload-scenario", help="Upload a simulated scenario (impacts, rain, frames) to Supabase")
     u.add_argument("--city", default="istanbul")
     u.add_argument("--scenario", default="istanbul-2026-10-14")
-    u.add_argument("--label", default="14 Ekim 2026 · gözlenen yağış (Sarıyer ~150 mm)")
+    u.add_argument("--label", default="14 Ekim 2026 · gözlenen yağış (Sarıyer 188 mm, kalibre)")
     u.add_argument("--start", default="2026-10-14T06:00")
     u.add_argument("--hours", type=int, default=30)
-    u.add_argument("--station-mm", type=float, default=150.0)
-    u.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
+    u.add_argument("--station-mm", type=float, default=188.0)
+    u.add_argument("--station-note", default="Sarıyer istasyonu 187,9 mm (İBB, 14 Ekim 2026)")
     u.set_defaults(func=cmd_upload_scenario)
     k = sub.add_parser("city", help="Whole-city 50 m simulation of the 14 Oct rain (and upload)")
     k.add_argument("--city", nargs="+", default=["istanbul-kent", "izmir-kent", "ankara-kent"])
@@ -211,8 +226,8 @@ def main() -> None:
     k.add_argument("--backend", choices=["auto", "cpu", "gpu"], default="auto")
     k.add_argument("--start", default="2026-10-14T06:00")
     k.add_argument("--hours", type=int, default=30)
-    k.add_argument("--station-mm", type=float, default=150.0)
-    k.add_argument("--station-note", default="Sarıyer ~150 kg/m², AKOM ara ölçümleri ve Prof. Dr. Orhan Şen")
+    k.add_argument("--station-mm", type=float, default=188.0)
+    k.add_argument("--station-note", default="Sarıyer istasyonu 187,9 mm (İBB, 14 Ekim 2026)")
     k.set_defaults(func=cmd_city)
     co = sub.add_parser("corridors", help="City-wide stream corridors (no buildings), optional pilot cut-out")
     co.add_argument("--city", default="istanbul-kent")

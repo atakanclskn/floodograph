@@ -15,7 +15,7 @@ import { decodeDepth, decodeVel, FrameStore, openSource, type SceneSource } from
 import { Debris } from "./debris";
 import { FloodField } from "./field";
 import { GridGeo, type LngLat } from "./geo";
-import { FOG, hideOwnBuildings, installWindowPattern, sceneStyle } from "./scene-style";
+import { FOG, hideOwnBuildings, sceneStyle } from "./scene-style";
 import { Spray } from "./spray";
 import { groundForGrid } from "./terrain";
 import { foamTexture, gridTexture, rippleNormalTexture } from "./textures";
@@ -189,7 +189,6 @@ export class FloodEngine {
         canvasContextAttributes: { antialias: !this.lowPower },
       });
       this.map = map;
-      installWindowPattern(map);
       (window as unknown as { __sceneEngine?: FloodEngine }).__sceneEngine = this; // debugging handle
       map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
       for (const ev of ["dragstart", "rotatestart", "pitchstart", "wheel", "touchstart"] as const)
