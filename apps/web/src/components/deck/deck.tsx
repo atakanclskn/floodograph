@@ -207,8 +207,8 @@ const VIDEO_IHA = "8dZj6plWY2E";
 /**
  * Inline player (14-ekim: 16:9, problem: 9:16 Shorts). It is only in the DOM while the slide is mounted (Deck renders one slide at a
  * time), so leaving the slide removes the iframe and the video stops. Underneath the iframe sits a thumbnail + play
- * link; with no network the iframe is not rendered at all and that fallback shows. Muted autoplay: sound and
- * fullscreen are the YouTube controls.
+ * link; with no network the iframe is not rendered at all and that fallback shows. Always muted autoplay (the deck
+ * is presented without sound).
  */
 type LiveVideoProps = {
   id: string;
@@ -222,7 +222,6 @@ type LiveVideoProps = {
 function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVideoProps) {
   const tall = aspect === "9/16";
   const [online, setOnline] = useState(true);
-  const [sound, setSound] = useState(false); // iframe reloads with mute=0 when switched on
   useEffect(() => {
     const sync = () => setOnline(navigator.onLine);
     sync();
@@ -260,24 +259,15 @@ function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVide
         {online && (
           <>
             {/* no pointer events: a click on the video is a click on the slide (advances), and YouTube's title link and
-                controls can't be hit by accident; sound comes from the button below */}
+                controls can't be hit by accident; always muted (the deck is presented without sound) */}
             <iframe
-              src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=${sound ? 0 : 1}&rel=0&playsinline=1${extra}`}
+              src={`https://www.youtube-nocookie.com/embed/${id}?autoplay=1&mute=1&rel=0&playsinline=1${extra}`}
               title={title}
               tabIndex={-1}
               allow="autoplay; encrypted-media; picture-in-picture"
               referrerPolicy="strict-origin-when-cross-origin"
               className="pointer-events-none absolute inset-0 size-full border-0 bg-black"
             />
-            <button
-              type="button"
-              onClick={() => setSound((v) => !v)}
-              aria-label={sound ? "Sesi kapat" : "Sesi aç"}
-              aria-pressed={sound}
-              className="absolute right-3 top-3 z-10 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black/65 px-3.5 text-base font-semibold text-white backdrop-blur transition-colors hover:bg-black/85"
-            >
-              {sound ? "🔇" : "🔊 Ses"}
-            </button>
           </>
         )}
       </div>
@@ -319,9 +309,12 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(-700, { dx: -650, dy: -700, dz: 520 }), depth: 3, rain: 0.1, buried: 0.5, contour: 0.6, ember: 0 },
     body: () => (
       <>
-        <motion.div variants={item} className="flex items-center gap-3">
-          <Image src="/icon.png" alt="" width={44} height={44} priority />
-          <span className="font-display text-[clamp(22px,1.6vw,30px)] font-extrabold tracking-[-0.02em]">floodograph</span>
+        {/* the cover carries the brand big; the top bar stays hidden here and appears from slide 2 */}
+        <motion.div variants={item} className="flex items-center gap-[clamp(12px,1.1vw,22px)]">
+          <Image src="/icon.png" alt="" width={96} height={96} priority className="size-[clamp(52px,min(4.6vw,8vh),96px)]" />
+          <span className="font-display text-[clamp(38px,min(3.6vw,6.4vh),72px)] font-extrabold leading-none tracking-[-0.03em]">
+            floodograph
+          </span>
         </motion.div>
         <Title className="text-[clamp(32px,min(6vw,9vh),104px)]">
           Su yolunu her zaman bulur. <span className="text-ember">Biz ondan önce buluruz.</span>
@@ -860,10 +853,15 @@ export function Deck() {
         className="pointer-events-none absolute inset-0 bg-[linear-gradient(90deg,rgb(10_15_18/0.92)_0%,rgb(10_15_18/0.8)_50%,rgb(10_15_18/0.45)_80%,rgb(10_15_18/0.25)_100%)] max-md:bg-[linear-gradient(180deg,rgb(10_15_18/0.35)_0%,rgb(10_15_18/0.9)_55%)]"
       />
 
-      <header className="absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center justify-between sm:left-[max(2rem,env(safe-area-inset-left))] sm:right-[max(2rem,env(safe-area-inset-right))]">
+      <header
+        inert={idx === 0}
+        className={`absolute left-[max(1rem,env(safe-area-inset-left))] right-[max(1rem,env(safe-area-inset-right))] top-[calc(1rem+env(safe-area-inset-top))] z-20 flex items-center justify-between transition-[opacity,transform] duration-500 ease-out sm:left-[max(2rem,env(safe-area-inset-left))] sm:right-[max(2rem,env(safe-area-inset-right))] ${
+          idx === 0 ? "pointer-events-none -translate-y-4 opacity-0" : "translate-y-0 opacity-100"
+        }`}
+      >
         <button type="button" onClick={() => go(0)} className="glass flex items-center gap-2.5 rounded-2xl py-2 pl-2.5 pr-4">
-          <Image src="/icon.png" alt="" width={26} height={26} />
-          <span className="font-display text-[clamp(16px,1.1vw,20px)] font-extrabold tracking-[-0.02em]">floodograph</span>
+          <Image src="/icon.png" alt="" width={34} height={34} />
+          <span className="font-display text-[clamp(18px,1.3vw,24px)] font-extrabold tracking-[-0.02em]">floodograph</span>
         </button>
         <div className="flex items-center gap-2">
           <Link href="/izmir" transitionTypes={["nav-forward"]} className="glass hidden min-h-11 items-center rounded-xl px-4 text-base font-semibold sm:inline-flex">

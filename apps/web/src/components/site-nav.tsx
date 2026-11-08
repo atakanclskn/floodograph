@@ -24,8 +24,8 @@ export function SiteNav() {
         aria-label="Ana sayfa"
         className="inline-flex min-h-11 items-center gap-2 rounded-xl pl-1.5 pr-3 transition-colors duration-150 hover:bg-white/10"
       >
-        <Image src="/icon.png" alt="" width={26} height={26} />
-        <span className="hidden font-display text-[16px] font-bold tracking-[-0.02em] lg:inline">floodograph</span>
+        <Image src="/icon.png" alt="" width={32} height={32} />
+        <span className="hidden font-display text-[18px] font-bold tracking-[-0.02em] lg:inline">floodograph</span>
       </Link>
       <span aria-hidden="true" className="mx-0.5 h-6 w-px bg-line" />
       {SECTIONS.map((s) => {
