@@ -57,11 +57,26 @@ function Note({ children }: { children: React.ReactNode }) {
     </motion.p>
   );
 }
-function Stat({ value, unit, label, ember = false, raw }: { value?: number; unit?: string; label: string; ember?: boolean; raw?: string }) {
+function Stat({
+  value,
+  unit,
+  label,
+  ember = false,
+  raw,
+  small = false,
+}: {
+  value?: number;
+  unit?: string;
+  label: string;
+  ember?: boolean;
+  raw?: string;
+  /** value <= 56 px at 1080p, tighter padding: for slides that share the row with a table or video */
+  small?: boolean;
+}) {
   return (
-    <motion.div variants={item} className="glass flex flex-col gap-2 rounded-2xl p-4 sm:gap-3 sm:p-6">
+    <motion.div variants={item} className={`glass flex flex-col gap-2 rounded-2xl ${small ? "p-3 sm:p-4" : "p-4 sm:gap-3 sm:p-6"}`}>
       <p
-        className={`font-mono text-[clamp(28px,min(3.4vw,5.6vh),68px)] font-semibold leading-none tracking-[-0.04em] [font-variant-numeric:tabular-nums] ${ember ? "text-ember" : "text-fg"}`}
+        className={`font-mono font-semibold leading-none tracking-[-0.04em] [font-variant-numeric:tabular-nums] ${small ? "text-[clamp(26px,min(2.8vw,4.6vh),56px)]" : "text-[clamp(28px,min(3.4vw,5.6vh),68px)]"} ${ember ? "text-ember" : "text-fg"}`}
       >
         {raw ?? <CountUp value={value ?? 0} />}
         {unit && <span className="ml-2 text-[0.45em] font-normal tracking-normal text-fg-3">{unit}</span>}
@@ -124,7 +139,7 @@ function Ctas() {
   );
 }
 /** Nested boxes: each level sits inside the previous one, so the sizes read as a funnel. */
-type Level = { value: string; unit: string; label: string; ember?: boolean };
+type Level = { value: string; unit?: string; label: string; ember?: boolean };
 function Nest({ levels }: { levels: Level[] }) {
   const [top, ...rest] = levels;
   if (!top) return null;
@@ -135,7 +150,7 @@ function Nest({ levels }: { levels: Level[] }) {
           className={`shrink-0 font-mono text-[clamp(26px,min(3vw,5vh),60px)] font-semibold leading-none tracking-[-0.04em] [font-variant-numeric:tabular-nums] ${top.ember ? "text-ember" : "text-fg"}`}
         >
           {top.value}
-          <span className="ml-2 text-[0.45em] font-normal tracking-normal text-fg-3">{top.unit}</span>
+          {top.unit && <span className="ml-2 text-[0.45em] font-normal tracking-normal text-fg-3">{top.unit}</span>}
         </p>
         <p className="text-[clamp(14px,min(1.1vw,2vh),20px)] leading-snug text-fg-2">{top.label}</p>
       </div>
@@ -201,12 +216,10 @@ type LiveVideoProps = {
   caption: string;
   /** "16/9" (default) fills the column width; "9/16" is a tall Shorts box sized by viewport height. */
   aspect?: "16/9" | "9/16";
-  /** Small 16:9 player (<= ~220 px tall) with the caption beside it, for slides that carry it under other content. */
-  compact?: boolean;
   /** Extra embed query params appended to the base ones (e.g. loop). */
   extra?: string;
 };
-function LiveVideo({ id, title, caption, aspect = "16/9", compact = false, extra = "" }: LiveVideoProps) {
+function LiveVideo({ id, title, caption, aspect = "16/9", extra = "" }: LiveVideoProps) {
   const tall = aspect === "9/16";
   const [online, setOnline] = useState(true);
   const [sound, setSound] = useState(false); // iframe reloads with mute=0 when switched on
@@ -221,14 +234,10 @@ function LiveVideo({ id, title, caption, aspect = "16/9", compact = false, extra
     };
   }, []);
   return (
-    <motion.figure variants={item} className={`flex min-w-0 gap-3 ${compact ? "flex-col items-start sm:flex-row sm:items-end sm:gap-4" : `flex-col ${tall ? "w-fit max-w-full" : "w-full"}`}`}>
+    <motion.figure variants={item} className={`flex min-w-0 flex-col gap-3 ${tall ? "w-fit max-w-full" : "w-full"}`}>
       <div
         className={`relative overflow-hidden rounded-2xl bg-[#141d22] shadow-2xl ring-1 ring-white/10 ${
-          compact
-            ? "aspect-video h-[min(220px,20vh)] max-w-full shrink-0"
-            : tall
-              ? "aspect-[9/16] h-[60vh] max-w-full md:h-[70vh]"
-              : "aspect-video w-full"
+          tall ? "aspect-[9/16] h-[60vh] max-w-full md:h-[70vh]" : "aspect-video w-full"
         }`}
       >
         {/* fallback layer under the iframe: thumbnail + play, what stays when there is no network */}
@@ -242,7 +251,7 @@ function LiveVideo({ id, title, caption, aspect = "16/9", compact = false, extra
             }}
             className="absolute inset-0 size-full object-cover"
           />
-          <span className={`relative flex items-center justify-center rounded-full bg-ember text-ink shadow-lg ${compact ? "size-11" : "size-16"}`}>
+          <span className="relative flex size-16 items-center justify-center rounded-full bg-ember text-ink shadow-lg">
             <svg aria-hidden="true" width="28" height="28" viewBox="0 0 16 16" fill="currentColor">
               <path d="M5 3.2v9.6a.6.6 0 0 0 .92.5l7.3-4.8a.6.6 0 0 0 0-1L5.92 2.7A.6.6 0 0 0 5 3.2Z" />
             </svg>
@@ -265,7 +274,7 @@ function LiveVideo({ id, title, caption, aspect = "16/9", compact = false, extra
               onClick={() => setSound((v) => !v)}
               aria-label={sound ? "Sesi kapat" : "Sesi aç"}
               aria-pressed={sound}
-              className={`absolute z-10 inline-flex items-center gap-1.5 rounded-xl bg-black/65 text-base font-semibold text-white backdrop-blur transition-colors hover:bg-black/85 ${compact ? "right-2 top-2 min-h-9 px-2.5" : "right-3 top-3 min-h-11 px-3.5"}`}
+              className="absolute right-3 top-3 z-10 inline-flex min-h-11 items-center gap-1.5 rounded-xl bg-black/65 px-3.5 text-base font-semibold text-white backdrop-blur transition-colors hover:bg-black/85"
             >
               {sound ? "🔇" : "🔊 Ses"}
             </button>
@@ -273,7 +282,7 @@ function LiveVideo({ id, title, caption, aspect = "16/9", compact = false, extra
         )}
       </div>
       {/* w-0 + min-w-full: the caption wraps to the video's width instead of widening a tall box */}
-      <figcaption className={`text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3 ${compact ? "" : "w-0 min-w-full"}`}>{caption}</figcaption>
+      <figcaption className="w-0 min-w-full text-[clamp(14px,min(1vw,1.8vh),19px)] text-fg-3">{caption}</figcaption>
     </motion.figure>
   );
 }
@@ -406,15 +415,12 @@ const SLIDES: Slide[] = [
         <Title>
           14 Ekim&rsquo;i yeniden oynattık: <span className="text-ember">9 noktanın 7&rsquo;si tuttu.</span>
         </Title>
-        <div className="grid items-start gap-3 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.7fr)] lg:gap-5">
-          <div className="flex flex-col gap-3 lg:gap-4">
-            <motion.div variants={group} className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-1">
-              <Stat value={3650} label="Suyun ulaştığı bina" ember />
-              <Stat value={128} label="Suyun ulaştığı okul, hastane ve kritik tesis" />
-            </motion.div>
-            <Note>Model bu olaya göre kalibre edildi; bağımsız sınama uydu taşkın haritasıyla yapılacak.</Note>
-          </div>
+        <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] lg:gap-8">
           <div className="flex min-w-0 flex-col gap-3 lg:gap-4">
+            <motion.div variants={group} className="grid grid-cols-2 gap-3">
+              <Stat small value={3650} label="Suyun ulaştığı bina" ember />
+              <Stat small value={128} label="Suyun ulaştığı okul, hastane ve kritik tesis" />
+            </motion.div>
             <DataTable
               head={["Yer", "Gözlenen", "Model"]}
               numericLast
@@ -425,7 +431,11 @@ const SLIDES: Slide[] = [
                 ["Baskının başlaması", "~17:30", "18:10"],
               ]}
             />
-            <LiveVideo id={VIDEO_IHA} title="14 Ekim, Ayazağa: İhlas Haber Ajansı görüntüsü" caption="İhlas Haber Ajansı · 14 Ekim, Ayazağa" compact />
+            <Note>Model bu olaya göre kalibre edildi; bağımsız sınama uydu verisiyle yapılacak.</Note>
+          </div>
+          {/* the width cap keeps the 16:9 box under ~42vh tall, so the slide still fits 1366x768 */}
+          <div className="w-full min-w-0 max-w-[calc(42vh*16/9)]">
+            <LiveVideo id={VIDEO_IHA} title="14 Ekim, Ayazağa: İhlas Haber Ajansı görüntüsü" caption="İhlas Haber Ajansı · 14 Ekim, Ayazağa" />
           </div>
         </div>
       </>
@@ -459,12 +469,16 @@ const SLIDES: Slide[] = [
       <>
         <Eyebrow>Pazar ve rakipler</Eyebrow>
         <Title>Türkiye&rsquo;de selin yıllık faturası 100–300 milyon dolar.</Title>
-        {/* nested boxes: global market contains the Turkish municipal market contains our year-3 target */}
+        {/* nested boxes: global market contains our first customer base contains the regulatory pull */}
         <Nest
           levels={[
             { value: "1,8", unit: "milyar $", label: "Küresel iklim riski analitiği pazarı (2025)" },
-            { value: "180", unit: "milyon ₺/yıl", label: "Türkiye belediyeleri: 30 büyükşehir, 51 il, 922 ilçe" },
-            { value: "7", unit: "milyon ₺/yıl", label: "3. yıl hedefi: 2 büyükşehir, 3 il, 10 ilçe, 5 kurum", ember: true },
+            { value: "1.003", unit: "belediye", label: "30 büyükşehir, 51 il, 922 ilçe: ilk müşteri kitlemiz" },
+            {
+              value: "TSRS 2",
+              label: "Bankalar ve büyük şirketler sel dahil fiziksel iklim riskini raporlamak zorunda",
+              ember: true,
+            },
           ]}
         />
         <motion.p
@@ -474,7 +488,7 @@ const SLIDES: Slide[] = [
           Fathom ve JBA harita satar, ICEYE seli olduktan sonra görür, HEC-RAS aylar ister.{" "}
           <span className="font-semibold text-ember">Biz: açık veriden otomatik, gerçek olayla kalibre, bina bazında.</span>
         </motion.p>
-        <Note>Kaynak: EM-DAT/DSİ, Fortune BI; belediye ve fiyat varsayımları bizim.</Note>
+        <Note>Kaynak: EM-DAT/DSİ, Fortune Business Insights, KGK.</Note>
       </>
     ),
   },
@@ -484,19 +498,51 @@ const SLIDES: Slide[] = [
     mood: { ...riverShot(700, { dx: -300, dy: 260, dz: 420 }), depth: 6, rain: 0.1, buried: 0.4, contour: 0.8, ember: 0.2 },
     body: () => (
       <>
-        <Eyebrow>İş modeli ve yol haritası</Eyebrow>
+        <Eyebrow>İş modeli</Eyebrow>
         <Title>
           Vatandaşa ücretsiz, <span className="text-ember">kuruma lisanslı.</span>
         </Title>
-        <Cards
-          numbered
-          items={[
-            ["0–6 ay · İBB pilotu", "AKOM ve İSKİ ile 6 aylık pilot. Modeli uydu verisiyle bağımsız olarak sınar, hidroloji uzmanı görüşü alırız."],
-            ["6–12 ay · İlk lisans", "Belediyeler yıllık lisans öder; büyükşehir için 1,5–3 milyon ₺. İkinci şehrimiz İzmir."],
-            ["1–2 yıl · Ölçek", "Model her ilçeye otomatik kurulur. Bankalar ve sigortalar tesis bazında sel riski verisi alır (TSRS 2)."],
-          ]}
-        />
-        <Note>Fiyatlar varsayım; pilotta doğrulanacak.</Note>
+        <motion.div variants={group} className="grid max-w-[1200px] gap-3 md:grid-cols-3 md:gap-4">
+          {[
+            {
+              who: "Belediyeler",
+              head: "Yıllık abonelik",
+              gets: "Güncel dere koridoru haritası, yağış senaryoları, bina bazında aciliyet listesi; model her yıl yenilenir.",
+              pays: "Kurulum + nüfusa göre yıllık lisans.",
+            },
+            {
+              who: "Banka, sigorta, büyük şirketler",
+              head: "Risk verisi ve API",
+              gets: "Tesis ya da adres bazında sel riski; TSRS 2 raporuna hazır çıktı.",
+              pays: "Tesis başına yıllık ücret ya da API kullanımı.",
+            },
+            {
+              who: "Altyapı ve dönüşüm projeleri",
+              head: "Proje bazlı analiz",
+              gets: "Dere ıslahı, kentsel dönüşüm ve kanal yatırımı için 'önce ve sonra' sel senaryosu.",
+              pays: "Proje başına.",
+            },
+          ].map((c) => (
+            <motion.div key={c.head} variants={item} className="glass flex flex-col gap-2 rounded-2xl p-4 sm:gap-3 sm:p-6">
+              <span className="text-[clamp(14px,min(1.05vw,1.9vh),20px)] font-semibold leading-snug text-ember">{c.who}</span>
+              <span className="font-display text-[clamp(18px,min(1.35vw,2.4vh),26px)] font-bold leading-tight">{c.head}</span>
+              <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 text-[clamp(15px,min(1.05vw,1.85vh),20px)] leading-snug sm:gap-y-3">
+                <dt className="text-fg-3">Ne alır</dt>
+                <dd className="text-fg-2">{c.gets}</dd>
+                <dt className="text-fg-3">Nasıl öder</dt>
+                <dd className="text-fg-2">{c.pays}</dd>
+              </dl>
+            </motion.div>
+          ))}
+        </motion.div>
+        <motion.p
+          variants={item}
+          className="max-w-[1200px] border-t border-line pt-3 text-[clamp(16px,min(1.2vw,2.2vh),24px)] leading-snug text-fg-2 sm:pt-4"
+        >
+          <strong className="font-extrabold text-fg">Vatandaş ücretsiz:</strong> kendi sokağını görür; bu görünürlük belediyeye talep
+          yaratır, bildirimler modeli besler.
+        </motion.p>
+        <Note>Satış yolu: ücretsiz pilot → yıllık lisans. İlk belediye, sonrakiler için referans olur.</Note>
       </>
     ),
   },
@@ -529,6 +575,27 @@ const SLIDES: Slide[] = [
             </motion.li>
           ))}
         </motion.ul>
+        <motion.ol
+          variants={item}
+          aria-label="Yol haritası"
+          className="flex max-w-[1100px] flex-col gap-2 text-[clamp(15px,min(1.2vw,2.2vh),22px)] leading-snug md:flex-row md:items-center md:gap-3"
+        >
+          {[
+            ["0–6 ay", "İBB pilotu"],
+            ["6–12 ay", "ilk lisans, İzmir"],
+            ["1–2 yıl", "her ilçe"],
+          ].map(([when, what], i) => (
+            <li key={when} className="flex items-center gap-3 md:contents">
+              {i > 0 && <span aria-hidden="true" className="hidden h-px min-w-6 flex-1 bg-line md:block" />}
+              <span className="flex items-center gap-2.5">
+                <span aria-hidden="true" className="size-3 shrink-0 rounded-full bg-ember" />
+                <span>
+                  <strong className="font-extrabold text-fg">{when}:</strong> <span className="text-fg-2">{what}</span>
+                </span>
+              </span>
+            </li>
+          ))}
+        </motion.ol>
         <Note>Pilot çalışma; resmi sel risk haritasının yerine geçmez, onu besler.</Note>
       </>
     ),
