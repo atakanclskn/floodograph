@@ -146,6 +146,17 @@ def cmd_corridors(args: argparse.Namespace) -> None:
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
 
 
+def cmd_corridor_tiles(args: argparse.Namespace) -> None:
+    """Tile the city-wide corridors into apps/web/public/corridors for viewport-only loading."""
+    from .config import ROOT
+    from .pipeline.corridor_tiles import write_tiles
+
+    cities = load_cities()
+    sources = {c: cities[c].data_dir / "corridors.geojson" for c in args.city if (cities[c].data_dir / "corridors.geojson").exists()}
+    out = ROOT.parent / "apps" / "web" / "public" / "corridors"
+    print(json.dumps(write_tiles(sources, out), ensure_ascii=False, indent=2))
+
+
 def cmd_calibrate(args: argparse.Namespace) -> None:
     from .pipeline.calibrate import calibrate
 
@@ -195,6 +206,9 @@ def main() -> None:
     co.add_argument("--exclude", default="istanbul")
     co.add_argument("--upload", action="store_true")
     co.set_defaults(func=cmd_corridors)
+    ct = sub.add_parser("corridor-tiles", help="Tile city-wide corridors for the web (viewport loading)")
+    ct.add_argument("--city", nargs="+", default=["istanbul-kent", "izmir-kent", "ankara-kent"])
+    ct.set_defaults(func=cmd_corridor_tiles)
     cb = sub.add_parser("calibrate", help="Parameter sweep of the pilot model against the 14 Oct observations")
     cb.add_argument("--city", default="istanbul")
     cb.set_defaults(func=cmd_calibrate)

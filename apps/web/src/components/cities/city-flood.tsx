@@ -12,6 +12,8 @@ import { Water3DLayer } from "@/components/demo/water-3d";
 import { floodRepository } from "@/lib/repository";
 import { fmtInt } from "@/lib/scenario";
 import { FrameStore } from "@/lib/water-frames";
+import { CorridorTiles } from "@/lib/corridor-tiles";
+import { CORRIDOR_ORDER, CORRIDOR_STYLE, type CorridorKind } from "@/lib/tier-style";
 
 const WORKER_URL = "/vendor/maplibre-gl-worker.mjs";
 
@@ -64,6 +66,7 @@ export function CityFlood() {
   const [stats, setStats] = useState({ wetHa: 0, urgent: 0, veryUrgent: 0 });
   const seen = useRef(new Map<string, number>()); // block key -> when it first became urgent (for the pulse)
   const zero = useRef<GridFrame | null>(null);
+  const [corr, setCorr] = useState<Record<CorridorKind, number>>({ derived: 0, buried_osm: 0, open: 0 });
   const city = CITIES[cityIdx]!;
 
   // map
@@ -91,6 +94,59 @@ export function CityFlood() {
       map.addControl(new NavigationControl({ visualizePitch: true }), "bottom-right");
       map.on("load", () => {
         if (!map) return;
+        // stream corridors of every city, loaded tile by tile only where the screen is
+        map.addSource("corridors", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
+        for (const kind of CORRIDOR_ORDER) {
+          const st = CORRIDOR_STYLE[kind];
+          map.addLayer(
+            {
+              id: `corridor-${kind}`,
+              type: "line",
+              source: "corridors",
+              minzoom: 10,
+              filter: ["==", ["get", "kind"], kind],
+              layout: { "line-cap": "round", "line-join": "round" },
+              paint: {
+                "line-color": st.color,
+                "line-opacity": kind === "derived" ? 0.85 : 0.6,
+                "line-width": ["interpolate", ["linear"], ["zoom"], 10, 0.8, 15, 2.6],
+                ...(st.dash ? { "line-dasharray": st.dash } : {}),
+              },
+            },
+            "basemap-buildings",
+          );
+        }
+        const tiles = new CorridorTiles();
+        const refresh = async () => {
+          if (!map) return;
+          const b = map.getBounds();
+          if (map.getZoom() < 10) {
+            setCorr({ derived: 0, buried_osm: 0, open: 0 });
+            return;
+          }
+          const feats = await tiles.around(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+          if (!map?.getSource("corridors")) return;
+          (map.getSource("corridors") as GeoJSONSource).setData({ type: "FeatureCollection", features: feats } as never);
+          const w = b.getWest(), e = b.getEast(), so = b.getSouth(), n = b.getNorth();
+          const counts = { derived: 0, buried_osm: 0, open: 0 } as Record<CorridorKind, number>;
+          for (const f of feats) {
+            const box = [Infinity, Infinity, -Infinity, -Infinity];
+            const walk = (c: unknown): void => {
+              if (typeof (c as number[])[0] === "number") {
+                const [x, y] = c as [number, number];
+                box[0] = Math.min(box[0]!, x);
+                box[1] = Math.min(box[1]!, y);
+                box[2] = Math.max(box[2]!, x);
+                box[3] = Math.max(box[3]!, y);
+              } else for (const k of c as unknown[]) walk(k);
+            };
+            walk(f.geometry.coordinates);
+            if (box[2]! >= w && box[0]! <= e && box[3]! >= so && box[1]! <= n) counts[f.properties.kind]++;
+          }
+          setCorr(counts);
+        };
+        map.on("moveend", () => void refresh());
+        void refresh();
         map.addSource("urgent", { type: "geojson", data: { type: "FeatureCollection", features: [] } });
         map.addLayer({
           id: "urgent-glow",
@@ -329,6 +385,19 @@ export function CityFlood() {
                   : "Bağlantı kurulamadı."}
             </p>
           )}
+          <ul className="flex flex-col gap-1.5 border-t border-line pt-3" aria-label="Ekranda görünen koridorlar">
+            <li className="text-[11px] uppercase tracking-[0.1em] text-fg-3">Ekranda görünen koridorlar</li>
+            {CORRIDOR_ORDER.map((k) => (
+              <li key={k} className="grid grid-cols-[24px_minmax(0,1fr)_auto] items-center gap-2.5 text-sm">
+                <svg aria-hidden="true" width="24" height="6" viewBox="0 0 24 6">
+                  <line x1="1" y1="3" x2="23" y2="3" stroke={CORRIDOR_STYLE[k].color} strokeWidth="2.4" strokeLinecap="round"
+                    strokeDasharray={CORRIDOR_STYLE[k].dash ? CORRIDOR_STYLE[k].dash!.map((d) => d * 2.4).join(" ") : undefined} />
+                </svg>
+                <span className={k === "derived" ? "font-medium" : "text-fg-2"}>{CORRIDOR_STYLE[k].label}</span>
+                <span className={`font-mono tabular-nums ${k === "derived" ? "text-ember" : "text-fg-2"}`}>{fmtInt(corr[k])}</span>
+              </li>
+            ))}
+          </ul>
           <p className="text-xs leading-relaxed text-fg-3">
             Turuncu: suyun 1,5 m&rsquo;yi geçtiği, sarı: 1 m&rsquo;yi geçtiği 200 m&rsquo;lik bloklar. 50 m ızgara, 2D sığ su
             modeli; yağış 14 Ekim&rsquo;in saatlik desenine göre dağıtılır. Bina bazında analiz Sarıyer pilotunda.

@@ -17,6 +17,7 @@ import type { FrameStore } from "@/lib/water-frames";
 import { Water3DLayer } from "./water-3d";
 import { buildBaseStyle, CONTOUR_LAYERS } from "./map-style";
 import { hideOwnBuildings } from "@/components/scene/scene-style";
+import { CorridorTiles } from "@/lib/corridor-tiles";
 
 type GeoData = GeoJSONSourceSpecification["data"];
 type Feature = { type: "Feature"; id?: number; geometry: unknown; properties: BuildingProps & { ht?: Tier } };
@@ -142,19 +143,41 @@ const blinkFilter = (from: number, to: number, selectedId: number | null): Expre
 
 const tierFilter = (tiers: readonly Tier[]): ExpressionSpecification => ["in", ["get", "ht"], ["literal", [...tiers]]];
 
-/** City-wide stream corridors (classification only; the pilot area is cut out of them, it has its own). */
-const CITYWIDE = "istanbul-kent";
+/** City-wide stream corridors of every city, tiled, loaded only where the screen is (the pilot has its own). */
 type CorridorBox = { kind: CorridorKind; x0: number; y0: number; x1: number; y1: number };
-type ViewState = { boxes: CorridorBox[]; last: MapStats | null };
+type ViewState = {
+  boxes: CorridorBox[];
+  last: MapStats | null;
+  pilot: unknown[];
+  tiles: CorridorTiles;
+  emit: (s: MapStats) => void;
+};
 const VIEW = new WeakMap<MlMap, ViewState>();
 
-/** Pilot corridors plus the city-wide ones (the latter optional: a missing upload just means fewer lines). */
+/** The pilot's own (building-scored) corridors from the database. */
 function loadCorridors(repo: ReturnType<typeof floodRepository>, cityId: string) {
-  const empty = { type: "FeatureCollection", features: [] } as { type: "FeatureCollection"; features: unknown[] };
-  return Promise.all([repo.corridors(cityId), repo.corridors(CITYWIDE).catch(() => empty)]).then(([a, b]) => ({
-    type: "FeatureCollection" as const,
-    features: [...(a.features as unknown[]), ...(b.features as unknown[])],
-  }));
+  return repo.corridors(cityId);
+}
+
+/** Load the corridor tiles around the view, redraw pilot + city-wide corridors, recount what is on screen. */
+async function refreshCorridors(map: MlMap) {
+  const v = VIEW.get(map);
+  if (!v) return;
+  const b = map.getBounds();
+  const city = await v.tiles.around(b.getWest(), b.getSouth(), b.getEast(), b.getNorth());
+  if (VIEW.get(map) !== v || !map.getSource("corridors")) return;
+  const features = [...v.pilot, ...city];
+  (map.getSource("corridors") as GeoJSONSource).setData({ type: "FeatureCollection", features } as GeoData);
+  v.boxes = [];
+  for (const f of features as { properties: CorridorProps; geometry: { coordinates: unknown } }[]) {
+    const box: CorridorBox = { kind: f.properties.kind, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
+    bboxOf(f.geometry.coordinates, box);
+    v.boxes.push(box);
+  }
+  if (v.last) {
+    v.last = { ...v.last, corridors: viewCounts(map) };
+    v.emit(v.last);
+  }
 }
 
 function bboxOf(coords: unknown, box: CorridorBox) {
@@ -194,17 +217,11 @@ function applyData(map: MlMap, b: FC, c: { features: unknown[] }, onStats: (s: M
   const fwSorted = Float64Array.from(fws).sort();
   (map.getSource("buildings") as GeoJSONSource).setData(b as GeoData);
   hideOwnBuildings(map, b.features.map((f) => f.properties.id));
-  (map.getSource("corridors") as GeoJSONSource).setData(c as GeoData);
-  const boxes: CorridorBox[] = [];
-  for (const f of c.features as { properties: CorridorProps; geometry: { coordinates: unknown } }[]) {
-    const box: CorridorBox = { kind: f.properties.kind, x0: Infinity, y0: Infinity, x1: -Infinity, y1: -Infinity };
-    bboxOf(f.geometry.coordinates, box);
-    boxes.push(box);
-  }
   const stats: MapStats = { tiers, corridors: { derived: 0, buried_osm: 0, open: 0 }, fwSorted, total: b.features.length };
-  VIEW.set(map, { boxes, last: stats });
-  stats.corridors = viewCounts(map);
+  const prev = VIEW.get(map);
+  VIEW.set(map, { boxes: [], last: stats, pilot: c.features, tiles: prev?.tiles ?? new CorridorTiles(), emit: onStats });
   onStats(stats);
+  void refreshCorridors(map);
   return fwSorted;
 }
 
@@ -334,11 +351,7 @@ export function FloodMap(props: FloodMapProps) {
         map.on("mouseleave", ["buildings", "alarm", "alarm-blink"], () => map && (map.getCanvas().style.cursor = ""));
         setMapReady(true);
         map.on("moveend", () => {
-          if (!map) return;
-          const v = VIEW.get(map);
-          if (!v?.last) return;
-          v.last = { ...v.last, corridors: viewCounts(map) };
-          latest.current.onStats(v.last);
+          if (map) void refreshCorridors(map);
         });
 
         if (!data) return;
