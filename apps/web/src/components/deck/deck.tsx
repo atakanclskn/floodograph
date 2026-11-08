@@ -482,6 +482,10 @@ const SLIDES: Slide[] = [
           <span className="font-semibold text-ember">Biz: açık veriden otomatik, gerçek olayla kalibre, bina bazında.</span>
         </motion.p>
         <Note>Kaynak: EM-DAT/DSİ, Fortune Business Insights, KGK.</Note>
+        <Note>
+          TSRS: Türkiye Sürdürülebilirlik Raporlama Standartları (KGK). TSRS 2, sel gibi fiziksel iklim risklerinin
+          raporlanmasını ister.
+        </Note>
       </>
     ),
   },
