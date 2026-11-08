@@ -191,7 +191,6 @@ export function SceneApp() {
   const container = useRef<HTMLDivElement>(null);
   const [attempt, setAttempt] = useState(0);
   const [engine, s] = useEngine(container, attempt);
-  const [noteOpen, setNoteOpen] = useState(false);
   // the 14 Oct hourly rain, for the rain overlay's strength at the playhead
   const rainRef = useRef<{ tMin: number; mm: number }[]>([]);
   useEffect(() => {
@@ -245,56 +244,8 @@ export function SceneApp() {
       <header className="pointer-events-none absolute inset-x-3 top-3 z-20 flex items-start justify-between gap-2 sm:inset-x-5 sm:top-5">
         <div className="flex flex-col items-start gap-2">
         <SiteNav />
-        <motion.div
-          initial={{ opacity: 0, y: -8, filter: "blur(4px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          transition={{ duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
-          className="glass pointer-events-auto hidden items-center gap-3 rounded-2xl py-2 pl-3 pr-4 md:flex"
-        >
-          <span aria-hidden="true" className="relative flex size-7 items-center justify-center rounded-[9px] bg-ember/15 ring-1 ring-ember/35">
-            <span className="size-2 rounded-full bg-ember shadow-[0_0_12px_2px_rgb(255_90_43/0.6)]" />
-          </span>
-          <div className="flex flex-col leading-tight">
-            <span className="font-display text-[15px] font-semibold tracking-[-0.01em]">
-              Floodograph <span className="font-normal text-fg-3">· Sinema</span>
-            </span>
-            <span className="text-xs text-fg-3">14 Ekim 2026 selinin 2B sığ su modeli · Sarıyer–Ayazağa</span>
-          </div>
-        </motion.div>
         </div>
 
-        <div className="pointer-events-auto relative">
-          <button
-            type="button"
-            aria-expanded={noteOpen}
-            aria-controls="temsil-notu"
-            onClick={() => setNoteOpen((v) => !v)}
-            className="glass inline-flex min-h-10 items-center gap-2 rounded-full px-3.5 text-xs font-medium text-fg-2 transition-colors hover:text-fg"
-          >
-            <Icon name="info" />
-            Görsel temsil
-          </button>
-          <AnimatePresence>
-            {noteOpen && (
-              <motion.p
-                id="temsil-notu"
-                initial={{ opacity: 0, y: -6, scale: 0.98 }}
-                animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -4, scale: 0.98, transition: { duration: 0.12 } }}
-                transition={spring}
-                className="glass absolute right-0 top-12 w-[min(320px,calc(100vw-24px))] origin-top-right rounded-2xl p-4 text-[13px] leading-relaxed text-fg-2"
-              >
-                Su yüzeyi, derinlik ve akış modelin 5 dakikalık karelerinden gelir; aradaki anlar doğrusal geçişle
-                gösterilir. <span className="text-fg">Yıkılan binalar:</span> bina çevresindeki akışta hız × derinlik
-                7 m²/s&rsquo;yi (hız ≥ 2 m/s) geçince yıkılmış, 3 m²/s&rsquo;yi geçince hasarlı sayılır (Clausen &amp; Clark 1990).{" "}
-                <span className="text-fg">Araçlar</span> hız × derinlik 0,45 m²/s&rsquo;de ya da 0,55 m derinlikte sürüklenir.
-                Yıkılma ve sürüklenme <span className="text-fg">görsel temsildir:</span> eşikler modelin hız ve derinlik
-                alanından gelir, ama yapı ve nesne fiziği simüle edilmez. Dalgalar ve köpük 20 m&rsquo;lik modelin
-                çözmediği ayrıntıdır. Pencere ışıkları atmosfer içindir.
-              </motion.p>
-            )}
-          </AnimatePresence>
-        </div>
       </header>
 
       {/* chapter caption during the tour */}

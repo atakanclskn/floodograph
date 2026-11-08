@@ -81,6 +81,12 @@ const initialState: EngineState = {
   fps: 0,
 };
 
+/** What is modelled and what is only shown, in the map's (i) box. */
+const TEMSIL_NOTU =
+  "<b>Görsel temsil:</b> su, derinlik ve akış modelin 5 dakikalık karelerinden gelir. Yıkılma (hız × derinlik ≥ 7 m²/s), " +
+  "hasar (≥ 3 m²/s; Clausen &amp; Clark 1990) ve araç sürüklenmesi (≥ 0,45 m²/s ya da 0,55 m) modelin eşikleridir; " +
+  "yapı ve nesne fiziği simüle edilmez. Dalga, köpük ve pencere ışıkları atmosfer içindir.";
+
 export class FloodEngine {
   state: EngineState = { ...initialState };
   private listeners = new Set<() => void>();
@@ -195,7 +201,7 @@ export class FloodEngine {
       this.map = map;
       trackPitch(map);
       (window as unknown as { __sceneEngine?: FloodEngine }).__sceneEngine = this; // debugging handle
-      map.addControl(new maplibregl.AttributionControl({ compact: true }), "bottom-right");
+      map.addControl(new maplibregl.AttributionControl({ compact: true, customAttribution: TEMSIL_NOTU }), "bottom-right");
       for (const ev of ["dragstart", "rotatestart", "pitchstart", "wheel", "touchstart"] as const)
         map.on(ev, (e: { originalEvent?: Event }) => {
           if (e.originalEvent && this.state.mode === "tur") this.freeMode();

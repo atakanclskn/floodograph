@@ -67,11 +67,11 @@ function Toggle({ pressed, onClick, children }: { pressed: boolean; onClick: () 
   );
 }
 
-/** Segmented switch between the static HAND analysis and the 14 Oct replay. */
+/** Segmented switch between the static analysis and the 14 Oct replay. */
 function ModeSwitch({ mode, onChange }: { mode: DemoMode; onChange: (m: DemoMode) => void }) {
   const options: { id: DemoMode; label: string; short: string }[] = [
-    { id: "static", label: "Statik analiz (HAND)", short: "Statik (HAND)" },
-    { id: "scenario", label: "14 Ekim 2026 selini oynat", short: "14 Ekim selini oynat" },
+    { id: "static", label: "Statik analiz", short: "Statik analiz" },
+    { id: "scenario", label: "14 Ekim selini oynat", short: "14 Ekim seli" },
   ];
   return (
     <div role="radiogroup" aria-label="Görünüm" className="grid grid-cols-2 gap-1 rounded-2xl bg-white/6 p-1">
@@ -82,7 +82,7 @@ function ModeSwitch({ mode, onChange }: { mode: DemoMode; onChange: (m: DemoMode
           role="radio"
           aria-checked={mode === o.id}
           onClick={() => onChange(o.id)}
-          className="relative min-h-11 rounded-xl px-2 text-[13px] font-medium leading-tight text-fg-3 transition-colors duration-150 hover:text-fg active:scale-[0.98] aria-checked:text-fg"
+          className="relative min-h-11 whitespace-nowrap rounded-xl px-2 text-[13px] font-medium leading-none text-fg-3 transition-colors duration-150 hover:text-fg active:scale-[0.98] aria-checked:text-fg"
         >
           {mode === o.id && (
             <motion.span
@@ -104,6 +104,46 @@ function ModeSwitch({ mode, onChange }: { mode: DemoMode; onChange: (m: DemoMode
         </button>
       ))}
     </div>
+  );
+}
+
+/** On-screen corridor counts by kind; shown in both modes while the corridor layer is on. */
+function CorridorList({ stats, show }: { stats: MapStats | null; show: boolean }) {
+  return (
+    <AnimatePresence initial={false}>
+      {show && (
+          <motion.ul
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: "auto" }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+            className="flex flex-col gap-1.5 overflow-hidden border-t border-line pt-3.5"
+            aria-label="Akış koridorları"
+          >
+            <li className="text-[11px] uppercase tracking-[0.1em] text-fg-3">Ekranda görünen koridorlar</li>
+            {CORRIDOR_ORDER.map((k) => (
+              <li key={k} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
+                <svg aria-hidden="true" width="28" height="6" viewBox="0 0 28 6">
+                  <line
+                    x1="1"
+                    y1="3"
+                    x2="27"
+                    y2="3"
+                    stroke={CORRIDOR_STYLE[k].color}
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeDasharray={CORRIDOR_STYLE[k].dash ? CORRIDOR_STYLE[k].dash!.map((d) => d * 2.4).join(" ") : undefined}
+                  />
+                </svg>
+                <span className={k === "derived" ? "font-medium" : "text-fg-2"}>{CORRIDOR_STYLE[k].label}</span>
+                <span className={`font-mono tabular-nums ${k === "derived" ? "text-ember" : "text-fg-2"}`}>
+                  {stats ? stats.corridors[k] : "–"}
+                </span>
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
   );
 }
 
@@ -159,40 +199,7 @@ function StaticLegend({
           })}
         </ul>
       )}
-      <AnimatePresence initial={false}>
-        {showCorridors && !compact && (
-          <motion.ul
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2, ease: [0.2, 0.8, 0.2, 1] }}
-            className="flex flex-col gap-1.5 overflow-hidden border-t border-line pt-3.5"
-            aria-label="Akış koridorları"
-          >
-            <li className="text-[11px] uppercase tracking-[0.1em] text-fg-3">Ekranda görünen koridorlar</li>
-            {CORRIDOR_ORDER.map((k) => (
-              <li key={k} className="grid grid-cols-[28px_minmax(0,1fr)_auto] items-center gap-3 text-sm">
-                <svg aria-hidden="true" width="28" height="6" viewBox="0 0 28 6">
-                  <line
-                    x1="1"
-                    y1="3"
-                    x2="27"
-                    y2="3"
-                    stroke={CORRIDOR_STYLE[k].color}
-                    strokeWidth="2.4"
-                    strokeLinecap="round"
-                    strokeDasharray={CORRIDOR_STYLE[k].dash ? CORRIDOR_STYLE[k].dash!.map((d) => d * 2.4).join(" ") : undefined}
-                  />
-                </svg>
-                <span className={k === "derived" ? "font-medium" : "text-fg-2"}>{CORRIDOR_STYLE[k].label}</span>
-                <span className={`font-mono tabular-nums ${k === "derived" ? "text-ember" : "text-fg-2"}`}>
-                  {stats ? stats.corridors[k] : "–"}
-                </span>
-              </li>
-            ))}
-          </motion.ul>
-        )}
-      </AnimatePresence>
+      <CorridorList stats={stats} show={showCorridors && !compact} />
       {!compact && (
         <p className="border-t border-line pt-3.5 text-[13px] leading-normal text-fg-3">
           Bir binaya dokun: akış çizgisine yüksekliği ve kademesi. 14 Ekim selini saat saat görmek için üstteki
@@ -500,6 +507,7 @@ export function DemoApp() {
                   <>
                     {scenarioHeader}
                     {scenarioBody}
+                    <CorridorList stats={stats} show={showCorridors} />
                   </>
                 )}
               </motion.div>

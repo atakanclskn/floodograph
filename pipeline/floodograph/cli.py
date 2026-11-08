@@ -152,6 +152,17 @@ def cmd_corridors(args: argparse.Namespace) -> None:
     print(json.dumps(summary, ensure_ascii=False, indent=2, default=str))
 
 
+def cmd_merkez(args: argparse.Namespace) -> None:
+    from .pipeline.merkez import run_merkez, upload_merkez
+
+    cities = load_cities()
+    for cid in args.city:
+        meta = run_merkez(cities[cid])
+        if args.upload:
+            meta["uploaded"] = upload_merkez(cities[cid])
+        print(json.dumps({k: v for k, v in meta.items() if k != "grid"}, ensure_ascii=False, default=str), flush=True)
+
+
 def cmd_corridor_tiles(args: argparse.Namespace) -> None:
     """Tile the city-wide corridors into apps/web/public/corridors for viewport-only loading."""
     from .config import ROOT
@@ -234,6 +245,10 @@ def main() -> None:
     co.add_argument("--exclude", default="istanbul")
     co.add_argument("--upload", action="store_true")
     co.set_defaults(func=cmd_corridors)
+    mz = sub.add_parser("merkez", help="City-centre rain ladder (20 m, buildings as walls) for /sehirler")
+    mz.add_argument("--city", nargs="+", default=["istanbul-merkez", "izmir-merkez", "ankara-merkez"])
+    mz.add_argument("--upload", action="store_true")
+    mz.set_defaults(func=cmd_merkez)
     ct = sub.add_parser("corridor-tiles", help="Tile city-wide corridors for the web (viewport loading)")
     ct.add_argument("--city", nargs="+", default=["istanbul-kent", "izmir-kent", "ankara-kent"])
     ct.set_defaults(func=cmd_corridor_tiles)
