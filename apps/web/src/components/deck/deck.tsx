@@ -167,7 +167,7 @@ const SLIDES: Slide[] = [
           Üstü betonla örtülen dere haritadan silinir, ama arazinin eğimi değişmez. Kuvvetli yağışta su eski yatağını bulur ve
           o yatağın üstüne yapılmış binaları basar.
         </Lead>
-        <motion.div variants={group} className="grid max-w-[700px] grid-cols-1 gap-3 sm:grid-cols-3">
+        <motion.div variants={group} className="grid max-w-[700px] grid-cols-3 gap-2 sm:gap-3">
           <Stat value={59} label="Arazide var, haritada yok: toplam 32,5 km akış koridoru" ember />
           <Stat value={4} label="OSM'de kayıtlı gömülü dere parçası" />
           <Stat value={22} label="OSM'de kayıtlı açık dere" />
@@ -381,13 +381,33 @@ const SLIDES: Slide[] = [
           <span className="text-fg">Sınırlamalar:</span> 20 m ızgara, tahmini menfez kapasiteleri; resmi risk haritası değildir.
           Veri: FABDEM CC BY-NC-SA, OSM ve Overture ODbL.
         </motion.p>
-        <motion.a
-          variants={item}
-          href="https://github.com/atakanclskn/floodograph"
-          className="font-mono text-sm text-fg-2 underline decoration-line underline-offset-4 hover:text-fg"
-        >
-          github.com/atakanclskn/floodograph
-        </motion.a>
+      </>
+    ),
+  },
+  {
+    id: "tesekkurler",
+    nav: "Teşekkürler",
+    mood: { ...riverShot(-700, { dx: -650, dy: -700, dz: 520 }), depth: 3, rain: 0.1, buried: 0.5, contour: 0.6, ember: 0 },
+    body: () => (
+      <>
+        <motion.div variants={item} className="flex items-center gap-3">
+          <Image src="/icon.png" alt="" width={40} height={40} />
+          <span className="font-display text-2xl font-bold tracking-[-0.02em]">floodograph</span>
+        </motion.div>
+        <Title className="text-[clamp(40px,min(8vw,12vh),120px)]">
+          Teşekkürler<span className="text-ember">.</span>
+        </Title>
+        <Lead>Dinlediğiniz için teşekkür ederiz. Sorularınızı bekliyoruz.</Lead>
+        <Ctas />
+        <motion.p variants={item} className="flex flex-wrap gap-x-3 gap-y-1 font-mono text-sm text-fg-2">
+          <span>EkoZeka 2026 · Takım SALU</span>
+          <a
+            href="https://github.com/atakanclskn/floodograph"
+            className="underline decoration-line underline-offset-4 hover:text-fg"
+          >
+            github.com/atakanclskn/floodograph
+          </a>
+        </motion.p>
       </>
     ),
   },
