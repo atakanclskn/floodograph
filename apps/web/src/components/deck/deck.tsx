@@ -106,11 +106,11 @@ const SLIDES: Slide[] = [
           <span className="font-display text-2xl font-bold tracking-[-0.02em]">floodograph</span>
         </motion.div>
         <Title className="text-[clamp(32px,min(7.4vw,11vh),112px)]">
-          Su yolunu her zaman bulur. <span className="text-ember">Biz önce buluruz.</span>
+          Su yolunu her zaman bulur. <span className="text-ember">Biz ondan önce buluruz.</span>
         </Title>
         <Lead>
-          Şehrin altına gömülen dereleri açık yükseklik verisinden yeniden bulur, seli fiziğiyle saat saat hesaplar ve hangi
-          binaya önce müdahale edilmesi gerektiğini sıralar.
+          Şehrin altına gömülen dereleri açık yükseklik verisinden yeniden bulur, seli fizik tabanlı bir modelle saat saat
+          simüle eder ve binaları müdahale önceliğine göre sıralar.
         </Lead>
         <Ctas />
         <motion.p variants={item} className="font-mono text-xs text-fg-3">
@@ -126,16 +126,16 @@ const SLIDES: Slide[] = [
     body: () => (
       <>
         <Eyebrow n="01">14 Ekim 2026 · İstanbul</Eyebrow>
-        <Title>Bir günde, bir mevsimin yağmuru.</Title>
+        <Title>Bir günde, bir aydan fazla yağmur.</Title>
         <Lead>
           Ayazağa’da dere taştı, caddeler nehre döndü, araçlar ve bir İETT otobüsü sürüklendi. Suyun hangi sokaktan geçeceğini
-          gösteren güncel bir harita yoktu.
+          önceden gösteren güncel bir harita yoktu.
         </Lead>
         <motion.div variants={group} className="grid max-w-[760px] grid-cols-2 gap-3 sm:grid-cols-4">
-          <Stat raw="1985" label="İBB'ye göre o yıldan beri en yoğun gün" />
-          <Stat value={150} unit="mm" label="Sarıyer istasyon toplamı" />
-          <Stat raw="29,2" unit="mm/sa" label="Zirve yoğunluk, saat 19:00" />
-          <Stat raw="≥3" label="Can kaybı; kesin sayı netleşmedi" ember />
+          <Stat raw="1985" label="İBB'ye göre bu yıldan beri en yağışlı gün" />
+          <Stat value={150} unit="mm" label="Sarıyer istasyonunda günlük toplam yağış" />
+          <Stat raw="29,2" unit="mm/sa" label="En yüksek saatlik yağış (19:00)" />
+          <Stat raw="≥3" label="Can kaybı (kesin sayı henüz netleşmedi)" ember />
         </motion.div>
       </>
     ),
@@ -151,13 +151,13 @@ const SLIDES: Slide[] = [
           Şehir dereleri kapattı. <span className="text-ember">Su unutmadı.</span>
         </Title>
         <Lead>
-          Üstü betonla örtülen dere haritadan silinir, ama arazinin şekli değişmez. Kuvvetli yağışta su eski yatağını bulur ve
-          o yatağın üstündeki binaları basar.
+          Üstü betonla örtülen dere haritadan silinir, ama arazinin eğimi değişmez. Kuvvetli yağışta su eski yatağını bulur ve
+          o yatağın üstüne yapılmış binaları basar.
         </Lead>
         <motion.div variants={group} className="grid max-w-[700px] grid-cols-1 gap-3 sm:grid-cols-3">
-          <Stat value={59} label="Hiçbir haritada olmayan akış koridoru (32,5 km)" ember />
+          <Stat value={59} label="Arazide var, haritada yok: toplam 32,5 km akış koridoru" ember />
           <Stat value={4} label="OSM'de kayıtlı gömülü dere parçası" />
-          <Stat value={22} label="Açık dere" />
+          <Stat value={22} label="OSM'de kayıtlı açık dere" />
         </motion.div>
       </>
     ),
@@ -173,10 +173,10 @@ const SLIDES: Slide[] = [
         <motion.ol variants={group} className="grid max-w-[980px] gap-2 sm:grid-cols-5 sm:gap-3">
           {[
             ["FABDEM", "Binalardan ve ağaçlardan arındırılmış 30 m yükseklik modeli."],
-            ["Dere ağı + HAND", "Akış yönü ve birikim; her binanın en yakın dereden yüksekliği."],
-            ["16.787 bina", "Overture: OpenStreetMap ve Microsoft'un uydu bina izleri."],
-            ["Sığ su çözücüsü", "2D, HEC-RAS sınıfı denklemler; gerçek yağış, 73 menfez, ekran kartında."],
-            ["Aciliyet", "Acil, yüksek, orta, izle. Okul ve hastaneler bir kademe yukarı."],
+            ["Dere ağı + HAND", "Suyun akış yönü ve biriktiği yerler; her binanın en yakın dere yatağına göre yüksekliği."],
+            ["16.787 bina", "Overture verisi: OpenStreetMap ve Microsoft'un uydu görüntüsünden çıkardığı bina tabanları."],
+            ["Sığ su çözücüsü", "HEC-RAS ile aynı sınıftan 2B denklemler; gerçek yağış ve 73 menfezle, ekran kartında çalışır."],
+            ["Aciliyet", "Dört kademe: acil, yüksek, orta, izle. Okul ve hastaneler bir kademe yukarı alınır."],
           ].map(([h, p], i) => (
             <motion.li key={h} variants={item} className="glass flex flex-col gap-1 rounded-2xl p-3 sm:gap-2 sm:p-4">
               <span className="font-mono text-xs text-ember">0{i + 1}</span>
@@ -198,11 +198,11 @@ const SLIDES: Slide[] = [
         <Title>Su, 1.427 binanın kapısına geldi.</Title>
         <motion.div variants={group} className="grid max-w-[860px] grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat value={1427} label="Suyun ulaştığı bina (16.787 bina içinde)" ember />
-          <Stat value={408} label="Suyun 0,5 m'yi aştığı bina" ember />
-          <Stat value={1366} unit="ha" label="En geniş anda su altındaki alan" />
-          <Stat raw="15/73" label="Taşan menfez; ilki 14 Ekim 18:32" />
+          <Stat value={408} label="Su derinliğinin 0,5 m'yi aştığı bina" ember />
+          <Stat value={1366} unit="ha" label="Selin en yaygın anında su altındaki alan" />
+          <Stat raw="15/73" label="Taşan menfez; ilki saat 18:32'de" />
         </motion.div>
-        <Lead>Binaların çoğu dere yataklarının ve haritada olmayan koridorların üstünde. Aciliyet listesi buradan çıkıyor.</Lead>
+        <Lead>Su basan binaların çoğu eski dere yataklarının ve haritada olmayan akış koridorlarının üstünde. Aciliyet listesi bu sonuçlardan çıkarılıyor.</Lead>
       </>
     ),
   },
@@ -213,7 +213,7 @@ const SLIDES: Slide[] = [
     body: () => (
       <>
         <Eyebrow n="05">Doğrulama</Eyebrow>
-        <Title>Haberlerde su basan yerler, modelde de ıslak.</Title>
+        <Title>Haberlerdeki su baskınları, modelde de var.</Title>
         <motion.div variants={item} className="glass max-w-[640px] overflow-hidden rounded-2xl">
           <table className="w-full text-left text-sm">
             <tbody>
@@ -233,8 +233,9 @@ const SLIDES: Slide[] = [
           </table>
         </motion.div>
         <Lead>
-          0,5 m eşiğinde 5 noktanın 3’ü isabet; rastgele bir nokta için bu olasılık %22. Beş nokta az: yanlış alarm oranı ve
-          IoU için uydu taşkın haritası gerekiyor.
+          Tablodaki değerler, haberlerde su bastığı bildirilen noktalarda modelin hesapladığı en yüksek su derinliği. 0,5 m
+          eşiğiyle 5 noktanın 3’ü isabetli; rastgele seçilen bir noktanın bu eşiği aşma olasılığı ise %22. Yine de beş nokta
+          güçlü bir doğrulama için az: yanlış alarm oranını ve IoU’yu ölçmek için uydu taşkın haritası gerekiyor.
         </Lead>
       </>
     ),
@@ -249,11 +250,11 @@ const SLIDES: Slide[] = [
         <Title>HEC-RAS sınıfı denklemler, ekran kartında.</Title>
         <motion.div variants={group} className="grid max-w-[860px] grid-cols-2 gap-3 lg:grid-cols-4">
           <Stat raw="10×" label="GPU hızlanması: 30 dk yerine 3 dk" ember />
-          <Stat raw="1:1" label="CPU ve GPU sonuçları birebir aynı" />
-          <Stat raw="10⁻¹⁴" label="Kütle dengesi hatası" />
-          <Stat raw="8/8" label="Analitik test: durgun göl, kütle, baraj yıkılması" />
+          <Stat raw="1:1" label="CPU ve GPU aynı sonucu veriyor" />
+          <Stat raw="10⁻¹⁴" label="Göreli kütle korunumu hatası" />
+          <Stat raw="8/8" label="Analitik testin tamamı geçti: durgun göl, kütle korunumu, baraj yıkılması" />
         </motion.div>
-        <Lead>HEC-RAS’ın tamamı değiliz: çekirdek denklemler aynı sınıftan. Farkımız, Türkiye’nin her yerinde açık veriden kendiliğinden kurulması.</Lead>
+        <Lead>HEC-RAS’ın tüm özelliklerini sunmuyoruz; ama çekirdekteki denklemler aynı sınıftan. Farkımız, modelin Türkiye’nin her yerinde açık veriden otomatik olarak kurulması.</Lead>
       </>
     ),
   },
@@ -267,9 +268,9 @@ const SLIDES: Slide[] = [
         <Title>Haritadan karara.</Title>
         <motion.div variants={group} className="grid max-w-[960px] gap-2 md:grid-cols-3 md:gap-3">
           {[
-            ["Belediyeler", "İBB AKOM, İZSU: sınırlı bütçeyle önce hangi koridora, hangi okula müdahale edilmeli."],
-            ["Şirketler ve bankalar", "TSRS 2, sel dahil fiziksel iklim riskinin raporlanmasını istiyor."],
-            ["Afet hazırlığı", "Suyun hangi saatte nereye geleceği: tahliye ve ekip planlaması."],
+            ["Belediyeler", "İBB AKOM, İZSU: sınırlı bütçeyle önce hangi koridora, hangi okula müdahale edileceğine karar vermek için."],
+            ["Şirketler ve bankalar", "TSRS 2, sel dahil fiziksel iklim risklerinin raporlanmasını şart koşuyor. Floodograph bu rapora tesis bazında sel riski verisi sağlar."],
+            ["Afet hazırlığı", "Suyun hangi saatte nereye ulaşacağını bilerek tahliye ve ekip planlaması yapmak için."],
           ].map(([h, p]) => (
             <motion.div key={h} variants={item} className="glass flex flex-col gap-1.5 rounded-2xl p-3.5 sm:gap-2 sm:p-5">
               <span className="font-display text-lg font-semibold sm:text-xl">{h}</span>
@@ -289,7 +290,7 @@ const SLIDES: Slide[] = [
         <Eyebrow n="08">Canlı</Eyebrow>
         <Title>Kendiniz görün.</Title>
         <Lead>
-          Analiz haritasında binalara dokunun, 14 Ekim’i saat saat oynatın. Sinemada selin dere yataklarından taşışını 3B izleyin.
+          Analiz haritasında binalara tıklayın, 14 Ekim’i saat saat oynatın. Sinemada selin dere yataklarından taşışını 3B izleyin.
         </Lead>
         <Ctas />
       </>
@@ -311,8 +312,8 @@ const SLIDES: Slide[] = [
           ))}
         </motion.ul>
         <motion.div variants={item} className="max-w-[640px] text-sm leading-relaxed text-fg-3">
-          <span className="text-fg-2">Bilmediklerimiz:</span> 20 m ızgara dar sokakları çözmez; menfez kapasiteleri tahmini;
-          yağış istasyon toplamına ölçekli. Resmi risk haritası değildir. FABDEM CC BY-NC-SA, OSM ve Overture ODbL.
+          <span className="text-fg-2">Sınırlamalar:</span> 20 m’lik hesap ızgarası dar sokakları ayırt edemez; menfez
+          kapasiteleri tahmine dayalı; yağış, istasyonun ölçtüğü toplama göre ölçeklendi. Resmi bir risk haritası değildir. FABDEM CC BY-NC-SA, OSM ve Overture ODbL.
         </motion.div>
         <motion.a
           variants={item}
