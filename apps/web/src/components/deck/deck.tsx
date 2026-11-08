@@ -182,7 +182,7 @@ function DataTable({ head, rows, numericLast = false }: { head: string[]; rows: 
                     i === 0
                       ? "font-semibold"
                       : numericLast && i === last
-                        ? "text-right font-mono font-semibold [font-variant-numeric:tabular-nums]"
+                        ? "whitespace-nowrap text-right font-mono font-semibold [font-variant-numeric:tabular-nums]"
                         : "text-fg-2"
                   }`}
                 >
@@ -710,8 +710,10 @@ export function Deck() {
       cancelAnimationFrame(raf);
       raf = requestAnimationFrame(mark);
     };
-    // after the enter transition, and again once the staggered items have settled (their offset inflates the height)
-    const t = setTimeout(mark, 700);
+    // Only once the staggered items have settled ("deck-settled"): while they still slide up, their offset inflates
+    // the scroll height, the cue switched on mid-transition and snapped off a moment later (the bottom of every
+    // slide looked faded, then popped in). Fallback for when no animation runs.
+    const t = setTimeout(mark, 1800);
     document.addEventListener("scroll", onScroll, true);
     document.addEventListener("deck-settled", onScroll);
     window.addEventListener("resize", onScroll);
@@ -895,7 +897,7 @@ export function Deck() {
               }),
             }}
             data-deck-scroll
-            className="flex max-h-full w-full max-w-[1280px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none] data-[more=1]:[mask-image:linear-gradient(to_bottom,black_calc(100%_-_40px),transparent)]"
+            className="flex max-h-full w-full max-w-[1280px] touch-pan-y touch-pinch-zoom flex-col gap-6 overflow-y-auto overscroll-contain [scrollbar-width:none]"
           >
             <motion.div
               variants={group}

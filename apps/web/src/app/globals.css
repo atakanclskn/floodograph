@@ -340,3 +340,20 @@ html[data-refract] .glass {
     transition: none;
   }
 }
+
+
+/* Deck overflow cue: the bottom edge of a slide fades when its content continues below. The fade length is a
+   registered custom property so it can ease in and out (a mask-image itself cannot transition). */
+@property --deck-fade {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+[data-deck-scroll] {
+  --deck-fade: 0px;
+  mask-image: linear-gradient(to bottom, black calc(100% - var(--deck-fade)), transparent);
+  transition: --deck-fade 0.35s ease;
+}
+[data-deck-scroll][data-more="1"] {
+  --deck-fade: 40px;
+}
