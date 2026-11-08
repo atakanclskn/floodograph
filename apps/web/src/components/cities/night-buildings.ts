@@ -55,6 +55,20 @@ const fragment = /* glsl */ `
 
 type Ring = [number, number][];
 
+/** Whether the mean vertex of a lon/lat ring lies inside [west, south, east, north]. */
+function inBox(ring: number[][] | undefined, b: readonly [number, number, number, number]) {
+  if (!ring?.length) return false;
+  let x = 0;
+  let y = 0;
+  for (const p of ring) {
+    x += p[0]!;
+    y += p[1]!;
+  }
+  x /= ring.length;
+  y /= ring.length;
+  return x >= b[0] && x <= b[2] && y >= b[1] && y <= b[3];
+}
+
 /** Signed area of a ring in local metres (shoelace). */
 function ringArea(ring: Ring) {
   let a = 0;
@@ -82,6 +96,15 @@ export class NightBuildingsLayer implements CustomLayerInterface {
   private readonly material = new THREE.ShaderMaterial({ vertexShader: vertex, fragmentShader: fragment, side: THREE.DoubleSide });
   private timer: ReturnType<typeof setTimeout> | undefined;
   private lastKey = "";
+  /** [west, south, east, north]: buildings centred inside are drawn by someone else (an analysed area). */
+  private hole: readonly [number, number, number, number] | null = null;
+
+  /** Leave out the buildings whose centre lies in `bbox` (null: draw all). */
+  setHole(bbox: readonly [number, number, number, number] | null) {
+    this.hole = bbox;
+    this.lastKey = "";
+    this.schedule();
+  }
 
   onAdd(map: MlMap, gl: WebGLRenderingContext | WebGL2RenderingContext) {
     this.map = map;
@@ -127,7 +150,7 @@ export class NightBuildingsLayer implements CustomLayerInterface {
     }
     const feats = map.querySourceFeatures(OVERTURE_SOURCE, { sourceLayer: OVERTURE_LAYER, filter: OVERTURE_FILTER });
     const c = map.getCenter();
-    const key = `${feats.length}|${c.lng.toFixed(3)}|${c.lat.toFixed(3)}`;
+    const key = `${feats.length}|${c.lng.toFixed(3)}|${c.lat.toFixed(3)}|${this.hole?.join(",") ?? ""}`;
     if (key === this.lastKey && this.mesh) {
       this.mesh.visible = true;
       return;
@@ -149,6 +172,7 @@ export class NightBuildingsLayer implements CustomLayerInterface {
       const id = Number(f.id ?? 0);
       const minH = overtureMinHeight(f.properties);
       const polys = (g.type === "Polygon" ? [g.coordinates] : g.coordinates) as number[][][][];
+      if (this.hole && inBox(polys[0]?.[0], this.hole)) continue;
       // ids are 64-bit: scale down before the modulo (see defaultFloors)
       const seed = (Math.floor(Math.abs(id) / 1e6) % 997) / 997;
       for (const poly of polys) {

@@ -212,7 +212,11 @@ export function addFloodedPlaceLayers(map: MlMap) {
   });
 }
 
-export function setFloodedPlaces(map: MlMap, places: HitPlace[]) {
+/** Second line under a flooded place's name. Default (pilot): depth and the scenario clock time of first contact. */
+export type PlaceNote = (p: HitPlace) => string;
+const defaultNote: PlaceNote = (p) => `su ${p.md.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} m · ${clock(p.fw)}'da ulaştı`;
+
+export function setFloodedPlaces(map: MlMap, places: HitPlace[], note: PlaceNote = defaultNote) {
   const src = map.getSource("places-hit") as GeoJSONSource | undefined;
   if (!src) return;
   src.setData({
@@ -224,7 +228,7 @@ export function setFloodedPlaces(map: MlMap, places: HitPlace[]) {
         name: p.name,
         fw: p.fw,
         md: p.md,
-        note: `su ${p.md.toLocaleString("tr-TR", { maximumFractionDigits: 1 })} m · ${clock(p.fw)}'da ulaştı`,
+        note: note(p),
       },
     })),
   });
@@ -244,7 +248,11 @@ export class FloodedPlaces {
   private t = -1;
   private timer: ReturnType<typeof setTimeout> | undefined;
 
-  constructor(private readonly map: MlMap) {
+  /** `note`: wording of the second label line (default: the pilot's clock time). */
+  constructor(
+    private readonly map: MlMap,
+    private readonly note: PlaceNote = defaultNote,
+  ) {
     addFloodedPlaceLayers(map);
     map.on("moveend", this.schedule);
     map.on("sourcedata", this.onSource);
@@ -284,7 +292,7 @@ export class FloodedPlaces {
   private refresh() {
     if (!this.map.getSource("places-hit")) return;
     const places = floodedPlaces(this.map, this.wet);
-    setFloodedPlaces(this.map, places);
+    setFloodedPlaces(this.map, places, this.note);
     this.fws = places.map((p) => p.fw).sort((a, b) => a - b);
     this.applied = -2;
     this.setTime(this.t);
