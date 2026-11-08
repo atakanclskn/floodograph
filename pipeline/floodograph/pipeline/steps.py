@@ -31,10 +31,16 @@ def hydro(city: CityConfig, stream_threshold_km2: float = 0.25):
 
 @cached("osm")
 def osm_layers(city: CityConfig):
+    # City centres: every building of a dense centre over Overpass takes ages (or times out) and only adds height
+    # tags; Overture already carries OSM heights / floors where they exist. Keep the small queries.
+    fast = city.id.endswith("-merkez")
     return {
-        "buildings": osm.buildings(city.bbox),
-        "critical": osm.critical_facilities(city.bbox),
-        "waterways": osm.waterways(city.hydro_bbox),
+        "buildings": osm.buildings(city.bbox) if not fast else gpd.GeoDataFrame(
+            {"osm_id": [], "height_m": []}, geometry=[], crs=4326),
+        "critical": overture.critical_facilities(city.bbox, city.data_dir / "cache") if fast
+        else osm.critical_facilities(city.bbox),
+        "waterways": overture.waterways(city.hydro_bbox, city.data_dir / "cache") if fast
+        else osm.waterways(city.hydro_bbox),
     }
 
 

@@ -83,3 +83,36 @@ def buildings(bbox, cache_dir: Path, osm_heights: pd.Series | None = None) -> gp
     g["height_m"] = est.fillna(DEFAULT_HEIGHT_M).clip(3, 250)
     g["osm_id"] = g["osm_id"].astype("int64")
     return g[["osm_id", "height_m", "source", "geometry"]].set_crs(4326, allow_override=True).reset_index(drop=True)
+
+
+# Overture place categories -> our critical-facility classes
+CRITICAL_CATEGORIES = {
+    "hospital": "hastane", "emergency_room": "hastane", "medical_center": "hastane",
+    "school": "okul", "elementary_school": "okul", "middle_school": "okul", "high_school": "okul",
+    "public_school": "okul", "private_school": "okul", "preschool": "okul", "kindergarten": "okul",
+    "fire_station": "itfaiye", "fire_department": "itfaiye",
+    "retirement_home": "bakimevi", "nursing_home": "bakimevi", "assisted_living_facility": "bakimevi",
+}
+
+
+def critical_facilities(bbox, cache_dir: Path) -> gpd.GeoDataFrame:
+    """Hospitals, schools, fire stations and care homes from Overture places (points), like osm.critical_facilities."""
+    path = cache_dir / "overture_places.parquet"
+    if not path.exists():
+        _download(bbox, path, "place")
+    g = gpd.read_parquet(path)
+    def crit(row):
+        tax = row.get("taxonomy")
+        cands = [row.get("basic_category")]
+        if isinstance(tax, dict):
+            cands += [tax.get("primary"), *list(tax.get("hierarchy") if tax.get("hierarchy") is not None else [])]
+        for c in cands:
+            if c in CRITICAL_CATEGORIES:
+                return CRITICAL_CATEGORIES[c]
+        return None
+
+    g["critical"] = g.apply(crit, axis=1)
+    g = g[g["confidence"].fillna(0) >= 0.5]
+    g = g.dropna(subset=["critical"])
+    out = gpd.GeoDataFrame(pd.DataFrame({"critical": g["critical"].values}), geometry=list(g.geometry.values))
+    return out.set_crs(4326, allow_override=True)

@@ -107,6 +107,12 @@ type Selected = { id: number; h: number; crit: string | null; wm: number; d: num
 type Row = { id: number; name: string; tag: string | null; depth: number; wm: number; lng: number; lat: number; i: number };
 
 const GENERIC = new Set(Object.values(CRIT_LABEL));
+/** The lowest simulated rain total: below it the reach is extrapolated from 0 mm, so never quote a number there. */
+const FIRST_LEVEL_MM = 25;
+/** "~120 mm'de su ulaşır" (rounded to 5 mm: levels are 25-50 mm apart), or "25 mm'nin altında bile …". */
+function reachText(mm: number): string {
+  return mm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} mm'nin altında bile su ulaşır` : `~${fmtInt(Math.round(mm / 5) * 5)} mm'de su ulaşır`;
+}
 
 /** Name of the street nearest to a point (within ~100 m), from the basemap's road-name lines. */
 function nearestStreet(lines: { name: string; coords: number[][] }[], lng: number, lat: number): string | null {
@@ -245,7 +251,7 @@ export function CityFlood() {
         );
         map.setLight({ anchor: "viewport", color: "#ffffff", intensity: 0.32, position: [1.3, 210, 35] });
         // named places in buildings the water reaches: depth at the current rain, and the rain that brings the water
-        places.current = new FloodedPlaces(map, (p: HitPlace) => `su ${fmtDec(p.md)} m · ${fmtInt(p.fw)} mm'de ulaşır`);
+        places.current = new FloodedPlaces(map, (p: HitPlace) => `su ${fmtDec(p.md)} m · ${reachText(p.fw)}`);
 
         map.on("click", LAYERS, (e) => {
           const p = e.features?.[0]?.properties as Record<string, unknown> | undefined;
@@ -528,7 +534,9 @@ export function CityFlood() {
       if (out.length >= TOP_N) break;
       const label = CRIT_LABEL[r.b.crit!] ?? "Kritik tesis";
       const nm = names.current.get(r.b.id);
-      out.push(toRow(r, nm ?? label, nm ? label : null));
+      // a named place keeps its own name only: the facility class came from a nearby point and can disagree
+      // (a stadium next to a school's point)
+      out.push(toRow(r, nm ?? label, null));
     }
     for (const r of rows.filter((r) => !r.b.crit && names.current.has(r.b.id)).sort(byDepth)) {
       if (out.length >= TOP_N) break;
@@ -706,7 +714,7 @@ export function CityFlood() {
                 {sel.wm <= mm ? `${fmtDec(selDepth)} m` : "yok"}
               </dd>
               <dt className="text-fg-3">Suyun ulaştığı yağış</dt>
-              <dd className="font-mono tabular-nums">{sel.wm < NEVER ? `${fmtInt(sel.wm)} mm` : `${fmtInt(topMm)} mm'ye kadar kuru`}</dd>
+              <dd className="font-mono tabular-nums">{sel.wm < NEVER ? (sel.wm < FIRST_LEVEL_MM ? `${FIRST_LEVEL_MM} mm'nin altında` : `~${fmtInt(Math.round(sel.wm / 5) * 5)} mm`) : `${fmtInt(topMm)} mm'ye kadar kuru`}</dd>
               <dt className="text-fg-3">Yükseklik</dt>
               <dd className="font-mono tabular-nums">{fmtInt(sel.h)} m</dd>
             </dl>
@@ -844,7 +852,7 @@ function Priorities({ rows, selId, onPick }: { rows: Row[]; selId: number | null
                   <span className="truncate text-sm font-medium">{r.name}</span>
                   <span className="truncate text-xs text-fg-3">
                     {r.tag ? `${r.tag} · ` : ""}
-                    {fmtInt(r.wm)} mm&rsquo;de su ulaşır
+                    {reachText(r.wm)}
                   </span>
                 </span>
                 <span
